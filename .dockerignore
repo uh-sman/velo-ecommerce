@@ -1,0 +1,29 @@
+# Build context for docker/*.Dockerfile (context is the repo root).
+# Dependencies are installed inside the image; host copies are the wrong OS.
+
+# Secrets — never in an image layer
+.env
+.env.*
+!.env.example
+
+# Host dependency trees and build output
+**/node_modules
+**/.venv
+**/.next
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+**/.coverage
+**/htmlcov
+
+# Not needed to build anything
+.git
+.github
+.vscode
+.idea
+docs
+legacy
+*.pdf

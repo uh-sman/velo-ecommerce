@@ -1,0 +1,89 @@
+# Local development dependencies. Not a production topology.
+#
+#   pnpm infra:up      start
+#   pnpm infra:down    stop
+#   pnpm infra:reset   stop, destroy volumes, start clean
+#
+# Credentials here are deliberately weak and deliberately committed: they are
+# local-only. A real secret in this file would be an incident (DISCOVERY.md R7).
+
+name: velo-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: velo-postgres
+    environment:
+      POSTGRES_USER: velo
+      POSTGRES_PASSWORD: velo
+      POSTGRES_DB: velo
+      # C collation is measurably faster for the b-tree index scans that
+      # dominate catalog queries, and matches what production should use.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      # Override when a native Postgres already holds 5432 (common on Windows):
+      #   VELO_POSTGRES_PORT=5433 pnpm infra:up
+      - "${VELO_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U velo -d velo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    command:
+      - "postgres"
+      - "-c"
+      - "log_statement=none"
+      - "-c"
+      - "log_min_duration_statement=200" # surface slow queries while developing
+      - "-c"
+      - "max_connections=100"
+
+  redis:
+    image: redis:7-alpine
+    container_name: velo-redis
+    ports:
+      - "${VELO_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # appendonly keeps reservations across a restart; losing them locally makes
+    # the TTL behaviour impossible to reason about while developing it.
+    command: ["redis-server", "--appendonly", "yes"]
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    container_name: velo-meilisearch
+    environment:
+      MEILI_MASTER_KEY: local-dev-master-key
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+    ports:
+      - "7700:7700"
+    volumes:
+      - meili-data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: velo-mailhog
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI — every email the app sends, readable
+    logging:
+      driver: none # MailHog logs every connection; it drowns the compose output
+
+volumes:
+  postgres-data:
+  redis-data:
+  meili-data:

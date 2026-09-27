@@ -1,0 +1,35 @@
+/**
+ * shadcn/ui → Velo tokens.
+ *
+ * Vendored shadcn components reference their own colour names (bg-primary,
+ * text-muted-foreground, ring-ring, …). Rather than ship a second palette,
+ * each name is pointed at a Velo semantic token, so dark mode and every
+ * future token change flow through without touching the components.
+ *
+ * Naming trap: shadcn's `text-primary` is the *brand* colour. Velo's primary
+ * text colour is `text-text-primary`. Import after tokens.css.
+ */
+
+@theme inline {
+  --color-background: var(--surface-page);
+  --color-foreground: var(--text-primary);
+
+  --color-card: var(--surface-raised);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--text-primary);
+
+  --color-primary: var(--brand-500);
+  --color-primary-foreground: var(--text-on-brand);
+  --color-secondary: var(--surface-sunken);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--surface-sunken);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--surface-sunken);
+  --color-accent-foreground: var(--text-primary);
+  --color-destructive: var(--color-danger);
+
+  --color-border: var(--border-default);
+  --color-input: var(--border-default);
+  --color-ring: var(--border-focus);
+}

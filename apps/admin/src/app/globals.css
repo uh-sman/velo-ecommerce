@@ -1,0 +1,17 @@
+@import "tailwindcss";
+@import "@velo/config/tailwind/tokens.css";
+
+@source "../";
+
+@layer base {
+  body {
+    background-color: var(--surface-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: var(--leading-normal);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A new push supersedes the run in progress; nobody needs the result for a
+# commit that has already been replaced.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24"
+
+jobs:
+  # ─── Secrets ──────────────────────────────────────────────────────────────
+  # First, and independent: a leaked key should be caught before anything else
+  # spends a runner minute (DISCOVERY.md R7).
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks needs history to scan the whole diff range
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── API ──────────────────────────────────────────────────────────────────
+  api:
+    name: API — lint, types, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: velo
+          POSTGRES_PASSWORD: velo
+          POSTGRES_DB: velo_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U velo"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --all-groups --frozen
+
+      - name: Lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy .
+
+      - name: Unit tests
+        run: uv run pytest -m "not integration" --cov=velo --cov-report=term-missing
+
+      - name: Integration tests
+        env:
+          VELO_RUN_INTEGRATION: "1"
+          VELO_ENV: development
+          VELO_SECRET_KEY: ci-secret-key-that-is-long-enough-to-validate
+          VELO_DATABASE_URL: postgresql+asyncpg://velo:velo@localhost:5432/velo_test
+          VELO_REDIS_URL: redis://localhost:6379/0
+        run: uv run pytest -m integration
+
+      - name: Export the OpenAPI document
+        env:
+          VELO_SECRET_KEY: ci-secret-key-that-is-long-enough-to-validate
+          VELO_DATABASE_URL: postgresql+asyncpg://velo:velo@localhost:5432/velo_test
+        run: uv run python scripts/export_openapi.py openapi.json
+
+      # The frontends type-check against this, so it is the contract in transit.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi
+          path: apps/api/openapi.json
+
+  # ─── Web ──────────────────────────────────────────────────────────────────
+  web:
+    name: Web — lint, types, build
+    runs-on: ubuntu-latest
+    needs: api # the generated client must match the API that just passed
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: openapi
+          path: apps/api
+
+      - name: Generate the typed client
+        run: pnpm --filter @velo/api-client generate:ci
+
+      # If the generated types changed, the committed client is stale and some
+      # call site has not been updated. Failing here is the entire point of
+      # generating rather than hand-writing the client (ADR-001).
+      - name: Fail if the generated client is out of date
+        run: git diff --exit-code packages/api-client/src/schema.d.ts
+
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # ─── Docker ───────────────────────────────────────────────────────────────
+  images:
+    name: Images build
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Storefront image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          build-args: APP=storefront
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Branch protection requires this one job, so adding a check above never
+  # means remembering to update a setting.
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    needs: [secrets, api, web, images]
+    if: always()
+    steps:
+      - name: Fail if any job failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "All checks passed."

@@ -1,0 +1,86 @@
+# Fast checks that run before a commit exists. The slow ones are CI's job.
+#
+#   pip install pre-commit
+#   pre-commit install && pre-commit install --hook-type commit-msg
+#
+# Never bypass with --no-verify. If a hook is wrong, fix the hook.
+
+default_install_hook_types: [pre-commit, commit-msg]
+fail_fast: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$ # two trailing spaces are a line break in Markdown
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512] # media belongs in object storage, not in git
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # ─── Python ──────────────────────────────────────────────────────────────
+  # Through `uv run` in apps/api, not the ruff/mypy mirror repos: one version
+  # (uv.lock), one config (apps/api/pyproject.toml, including the pydantic
+  # mypy plugin), and the real dependencies — so a hook can never pass
+  # something CI fails, or the other way round.
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: uv run --directory apps/api ruff check --fix
+        language: system
+        files: ^apps/api/.*\.py$
+        pass_filenames: false
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --directory apps/api ruff format
+        language: system
+        files: ^apps/api/.*\.py$
+        pass_filenames: false
+
+      - id: mypy
+        name: mypy
+        entry: uv run --directory apps/api mypy velo tests
+        language: system
+        files: ^apps/api/.*\.py$
+        pass_filenames: false
+
+  # ─── TypeScript ──────────────────────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: pnpm --recursive lint
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier
+        entry: pnpm format:check
+        language: system
+        files: \.(ts|tsx|js|json|css|md|ya?ml)$
+        pass_filenames: false
+
+  # ─── Secrets ─────────────────────────────────────────────────────────────
+  # DISCOVERY.md R7. A leaked key is cheap to prevent and expensive to rotate.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # ─── Commit messages ─────────────────────────────────────────────────────
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, refactor, perf, test, docs, chore, build, revert]

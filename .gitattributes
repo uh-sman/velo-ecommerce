@@ -1,0 +1,9 @@
+# LF everywhere, including Windows checkouts: Prettier, the byte-for-byte check on
+# the generated API client, and the shell entrypoints in the images all assume it.
+* text=auto eol=lf
+
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

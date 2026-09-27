@@ -1,0 +1,218 @@
+/**
+ * Velo design tokens — the single source of truth for both apps.
+ * Specified in docs/DESIGN-SYSTEM.md §2. Change them there first.
+ *
+ * Structure:
+ *   @theme       primitive scales — Tailwind generates utilities from these
+ *   :root        semantic tokens — what components actually reference
+ *   dark         semantic tokens re-pointed; primitives never change meaning
+ *   @theme inline  semantic tokens exposed as utilities (bg-surface-page, …)
+ *
+ * A hard-coded hex value in a component is a code-review failure.
+ */
+
+@theme {
+  /* ── Brand ─────────────────────────────────────────────────────────── */
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #d9e6ff;
+  --color-brand-300: #8fb4ff;
+  --color-brand-500: #2563eb;
+  --color-brand-600: #1d4ed8;
+  --color-brand-700: #1e40af;
+  --color-brand-900: #1e3a8a;
+
+  /* ── Neutrals ──────────────────────────────────────────────────────── */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+  --color-neutral-950: #020617;
+
+  /* ── Semantic status ───────────────────────────────────────────────── */
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0284c7;
+  --color-sale: #dc2626;
+
+  /* ── Type ──────────────────────────────────────────────────────────── */
+  /* --font-inter / --font-jetbrains-mono are set on <html> by each app's
+     next/font loader (self-hosted, subset, preloaded, font-display: swap). */
+  --font-sans: var(--font-inter, "Inter var"), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains-mono, "JetBrains Mono"), ui-monospace, monospace;
+
+  --text-xs: clamp(0.75rem, 0.73rem + 0.1vw, 0.8125rem);
+  --text-sm: clamp(0.875rem, 0.85rem + 0.12vw, 0.9375rem);
+  --text-base: clamp(1rem, 0.97rem + 0.15vw, 1.0625rem);
+  --text-lg: clamp(1.125rem, 1.08rem + 0.22vw, 1.25rem);
+  --text-xl: clamp(1.25rem, 1.18rem + 0.35vw, 1.5rem);
+  --text-2xl: clamp(1.5rem, 1.38rem + 0.6vw, 1.875rem);
+  --text-3xl: clamp(1.875rem, 1.68rem + 0.98vw, 2.5rem);
+  --text-4xl: clamp(2.25rem, 1.93rem + 1.6vw, 3.5rem);
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.55;
+  --leading-relaxed: 1.7;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+
+  /* ── Radius ────────────────────────────────────────────────────────── */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-full: 9999px;
+
+  /* ── Elevation ─────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  /* ── Motion ────────────────────────────────────────────────────────── */
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Breakpoints ───────────────────────────────────────────────────── */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+}
+
+/* ── Semantic tokens — light ──────────────────────────────────────────
+   Components reference these, never the primitives above. The day
+   "danger" becomes orange, one line changes. */
+:root {
+  --surface-page: var(--color-neutral-0);
+  --surface-raised: var(--color-neutral-0);
+  --surface-sunken: var(--color-neutral-50);
+  --surface-overlay: var(--color-neutral-0);
+  --surface-inverse: var(--color-neutral-900);
+
+  --text-primary: var(--color-neutral-900);
+  --text-secondary: var(--color-neutral-600);
+  --text-tertiary: var(--color-neutral-500);
+  --text-inverse: var(--color-neutral-0);
+  --text-on-brand: #ffffff;
+
+  --border-subtle: var(--color-neutral-200);
+  --border-default: var(--color-neutral-300);
+  --border-strong: var(--color-neutral-400);
+  --border-focus: var(--color-brand-500);
+
+  --brand-500: var(--color-brand-500);
+  --brand-600: var(--color-brand-600);
+}
+
+/* Dark values, factored once so the two selectors below cannot drift. */
+@layer base {
+  @media (prefers-color-scheme: dark) {
+    /* System preference — unless the user explicitly chose light. */
+    :root:not([data-theme="light"]) {
+      --surface-page: var(--color-neutral-950);
+      --surface-raised: var(--color-neutral-900);
+      --surface-sunken: var(--color-neutral-950);
+      --surface-overlay: var(--color-neutral-800);
+
+      --text-primary: var(--color-neutral-50);
+      --text-secondary: var(--color-neutral-400);
+      --text-tertiary: var(--color-neutral-500);
+
+      --border-subtle: var(--color-neutral-800);
+      --border-default: var(--color-neutral-700);
+      --border-strong: var(--color-neutral-600);
+
+      /* brand-500 on near-black fails AA, so the brand lightens in dark. */
+      --brand-500: #60a5fa;
+      --brand-600: #3b82f6;
+      --border-focus: #60a5fa;
+    }
+  }
+
+  /* Explicit user choice always wins over the system preference. */
+  :root[data-theme="dark"] {
+    --surface-page: var(--color-neutral-950);
+    --surface-raised: var(--color-neutral-900);
+    --surface-sunken: var(--color-neutral-950);
+    --surface-overlay: var(--color-neutral-800);
+
+    --text-primary: var(--color-neutral-50);
+    --text-secondary: var(--color-neutral-400);
+    --text-tertiary: var(--color-neutral-500);
+
+    --border-subtle: var(--color-neutral-800);
+    --border-default: var(--color-neutral-700);
+    --border-strong: var(--color-neutral-600);
+
+    --brand-500: #60a5fa;
+    --brand-600: #3b82f6;
+    --border-focus: #60a5fa;
+  }
+
+  html {
+    background-color: var(--surface-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: var(--leading-normal);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Focus is never removed and never animated (DESIGN-SYSTEM.md §4). */
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+
+  /* Reduced means reduced, not removed: state changes still happen. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* Expose the semantic tokens as utilities: bg-surface-page, text-secondary… */
+@theme inline {
+  --color-surface-page: var(--surface-page);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-inverse: var(--surface-inverse);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+  --color-text-on-brand: var(--text-on-brand);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-focus: var(--border-focus);
+
+  --color-brand: var(--brand-500);
+  --color-brand-hover: var(--brand-600);
+}

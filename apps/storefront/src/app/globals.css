@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "@velo/config/tailwind/tokens.css";
+@import "@velo/config/tailwind/shadcn-bridge.css";
+
+/* Tailwind 4 scans these for utility usage. */
+@source "../";
+@source "../../../../packages/api-client/src";
+
+@layer base {
+  body {
+    background-color: var(--surface-page);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: var(--leading-normal);
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Prices align in a column and do not jitter as quantities change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The skip link is visible the moment it is focused, and not before. */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: var(--spacing-2, 0.5rem);
+    z-index: 100;
+  }
+
+  .skip-link:focus {
+    left: var(--spacing-2, 0.5rem);
+    padding: 0.5rem 1rem;
+    background-color: var(--surface-raised);
+    border-radius: var(--radius-md);
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+}

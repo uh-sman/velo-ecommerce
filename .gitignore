@@ -1,0 +1,48 @@
+# Environment — never commit real secrets. .env.example is the template.
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Intermediate for `pnpm generate:api`. The client generated from it
+# (packages/api-client/src/schema.d.ts) is committed: CI diffs against it.
+apps/api/openapi.json
+
+# Editors and OS
+.history/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Test and build artefacts
+playwright-report/
+test-results/
+coverage/
+lighthouse-report*
+
+# Local infrastructure state
+docker/data/
