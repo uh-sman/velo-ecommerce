@@ -17,7 +17,9 @@ def _settings(**overrides: str) -> Settings:
         "database_url": "postgresql+asyncpg://velo:velo@localhost:5432/velo",
     }
     values.update(overrides)
-    return Settings(**values)  # type: ignore[arg-type]
+    # No env files: a developer's .env (VELO_DEBUG=true, say) must not decide
+    # which production rule fires first.
+    return Settings(_env_file=None, **values)  # type: ignore[arg-type]
 
 
 def test_missing_required_setting_fails_at_construction(

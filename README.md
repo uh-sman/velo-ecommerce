@@ -395,6 +395,10 @@ pnpm infra:up                             # docker compose, under the hood
 # 4. API
 cd apps/api
 uv sync --all-groups                      # install, including dev tooling
+uv run alembic upgrade head               # create the schema
+uv run python -m velo.scripts.seed        # demo catalog, admin, and customer
+#    From the repo root instead: pnpm db:migrate, pnpm db:seed,
+#    or pnpm db:reset (drop everything, migrate, seed).
 uv run uvicorn velo.main:app --reload --port 8000
 #    → http://localhost:8000/docs
 #    → http://localhost:8000/api/v1/system/info   (reads Postgres)
@@ -421,10 +425,6 @@ VELO_RUN_INTEGRATION=1 uv run pytest
 ### Setup — added by later phases
 
 ```bash
-# Phase 4 — schema
-uv run alembic upgrade head               # migrations
-uv run python -m velo.scripts.seed        # demo catalog + admin user
-
 # Phase 8 — payments
 stripe listen --forward-to localhost:8000/api/v1/webhooks/stripe
 #    Copy the printed whsec_... into VELO_STRIPE_WEBHOOK_SECRET, restart the API.

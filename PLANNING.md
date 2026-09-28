@@ -2,8 +2,8 @@
 
 > **This is the working document.** Every task below has a checkbox. Tick it when the task meets its Definition of Done. Update the progress table at the top as phases complete.
 >
-> **Last updated:** 2026-09-27
-> **Current phase:** Phase 3 — Foundation & Dev Environment. 23/24: everything verified on the development machine, including all three Docker images; the clean-clone run on a second machine and a first green CI run on GitHub remain — see the note at the head of Phase 3. Phases 0 and 1 are complete; Phase 2 is 16/17.
+> **Last updated:** 2026-09-28
+> **Current phase:** Phase 5 — Identity & Access. Phase 4 is complete (15/15): the full schema migrates up and down, matches the models exactly, and seeds. Phase 3 is 23/24 — the clean-clone run on a second machine and a first green CI run on GitHub remain. Phases 0 and 1 are complete; Phase 2 is 16/17.
 
 ---
 
@@ -35,8 +35,8 @@
 | 1   | Architecture & Decisions        |      12 |     12 | ✅ Done                                      | 3 d           |
 | 2   | UX & Visual Design              |      17 |     16 | 🚧 1 left — prototype                        | 5 d           |
 | 3   | Foundation & Dev Environment    |      24 |     23 | 🚧 1 left — clean-clone run on a 2nd machine | 4 d           |
-| 4   | Database & Migrations           |      15 |      0 | 🔜 Not started                               | 4 d           |
-| 5   | Identity & Access               |      16 |      0 | 🔜 Not started                               | 5 d           |
+| 4   | Database & Migrations           |      15 |     15 | ✅ Done                                      | 4 d           |
+| 5   | Identity & Access               |      16 |      0 | 🔜 Next                                      | 5 d           |
 | 6   | Catalog & Search                |      19 |      0 | 🔜 Not started                               | 7 d           |
 | 7   | Cart & Pricing Engine           |      12 |      0 | 🔜 Not started                               | 5 d           |
 | 8   | Checkout & Payments             |      34 |      0 | 🔜 Not started                               | 10 d          |
@@ -50,7 +50,7 @@
 | 16  | Observability                   |      10 |      0 | 🔜 Not started                               | 3 d           |
 | 17  | Deployment & Launch             |      21 |      0 | 🔜 Not started                               | 5 d           |
 | 18  | Post-Launch                     |      10 |      0 | 🔜 Not started                               | ongoing       |
-|     | **Total**                       | **326** | **53** | **16%**                                      | **~19 weeks** |
+|     | **Total**                       | **326** | **68** | **21%**                                      | **~19 weeks** |
 
 _Task counts are the real checkbox count per phase, verified against the document. The original table under-counted by 25; the estimates are unchanged, since they were made against the work rather than against the count._
 
@@ -227,21 +227,23 @@ _Milestone M1 — the walking skeleton. Small in features, large in leverage: ev
 
 _Schema is the hardest thing to change later. Get it right now. Full detail in `docs/DATA-MODEL.md`._
 
-- [ ] Configure SQLAlchemy 2.0 async engine, session factory, and a FastAPI session dependency with correct transaction scoping
-- [ ] Configure Alembic for async, with a naming convention for constraints (so autogenerate produces reviewable diffs)
-- [ ] Implement the base model: UUIDv7 primary keys, `created_at`, `updated_at`, optional `deleted_at`
-- [ ] Implement the `Money` type — `BIGINT` minor units + currency column, with a helper type decorator. **No floats anywhere.**
-- [ ] Migration: identity — `users`, `sessions`, `refresh_tokens`, `addresses`, `roles`, `permissions`
-- [ ] Migration: catalog — `products`, `product_variants`, `product_options`, `option_values`, `variant_option_values`, `categories`, `collections`, `product_media`, `reviews`
-- [ ] Migration: inventory — `inventory_items`, `inventory_movements`, `inventory_reservations`
-- [ ] Migration: cart — `carts`, `cart_items`
-- [ ] Migration: checkout & orders — `checkout_sessions`, `orders`, `order_items`, `order_events`, `fulfilments`, `returns`, `return_items`
-- [ ] Migration: payments — `payments`, `payment_events`, `refunds`, `idempotency_keys`
-- [ ] Migration: commerce rules — `discounts`, `discount_redemptions`, `shipping_zones`, `shipping_rates`, `tax_rates`
-- [ ] Migration: platform — `audit_log`, `outbox_events`, `webhook_deliveries`
-- [ ] Add every index defined in `docs/DATA-MODEL.md`, including partial indexes on hot paths
-- [ ] Add `CHECK` constraints: non-negative quantities, non-negative money, valid status values, `total = subtotal + tax + shipping - discount`
-- [ ] Write the seed script: 50 products with variants and images, 3 collections, 5 discounts, an admin user, a demo customer with order history
+- [x] Configure SQLAlchemy 2.0 async engine, session factory, and a FastAPI session dependency with correct transaction scoping — _`velo/db/session.py`: one engine per process, `get_session` per request (the service owns the commit), and `session_scope()` for scripts and jobs (commit on success, roll back on error)_
+- [x] Configure Alembic for async, with a naming convention for constraints (so autogenerate produces reviewable diffs) — _`apps/api/alembic.ini` + `migrations/env.py`, URL from `VELO_DATABASE_URL`; one transaction per run; `pk_`/`fk_`/`uq_`/`ix_`/`ck_<table>_<name>` convention in `velo/db/base.py`. `uv run alembic check` reports no drift. The full-text expression index is excluded from that comparison (Postgres stores it normalised, which Alembic cannot match) and asserted by its own test_
+- [x] Implement the base model: UUIDv7 primary keys, `created_at`, `updated_at`, optional `deleted_at` — _`HasId`, `HasCreatedAt`, `HasTimestamps`, `SoftDeletable` mixins. Postgres 16 has no `uuidv7()`: IDs are generated in Python (`velo/db/ids.py`, monotonic within a millisecond), and migration 0001 defines a SQL `uuidv7()` for rows inserted outside the ORM_
+- [x] Implement the `Money` type — `BIGINT` minor units + currency column, with a helper type decorator. **No floats anywhere.** — _`velo/core/money.py` (value object; refuses floats, `Decimal`, `bool`, and mixed currencies) and `MinorUnits` in `velo/db/types.py`, which raises if a non-int is bound to a money column by any ORM path. A unit test sweeps every model: every `*_amount` column is `MinorUnits`, no column is a float_
+- [x] Migration: identity — `users`, `refresh_tokens`, `addresses` — _`0002`. **Not tables, by design:** `roles`/`permissions` (five fixed roles in `users.role`, permissions mapped in code in Phase 5) and `sessions` (a session is a refresh-token family, ADR-008). DATA-MODEL.md §3 records why_
+- [x] Migration: catalog — `products`, `product_variants`, `product_options`, `option_values`, `variant_option_values`, `categories`, `collections`, `product_media`, `reviews` — _`0003`, plus the `product_collections` join table. `reviews.order_id` gets its foreign key in `0006`, once `orders` exists_
+- [x] Migration: inventory — `inventory_items`, `inventory_movements`, `inventory_reservations` — _`0007`, after checkout, because reservations reference checkout sessions_
+- [x] Migration: cart — `carts`, `cart_items` — _`0005`_
+- [x] Migration: checkout & orders — `checkout_sessions`, `orders`, `order_items`, `order_events`, `fulfilments`, `returns`, `return_items` — _`0006`, plus `fulfilment_items` and `discount_redemptions` (which references `orders`)_
+- [x] Migration: payments — `payments`, `payment_events`, `refunds`, `idempotency_keys` — _`0008`_
+- [x] Migration: commerce rules — `discounts`, `discount_redemptions`, `shipping_zones`, `shipping_rates`, `tax_rates` — _`0004`, ahead of checkout, which references discounts and shipping rates_
+- [x] Migration: platform — `audit_log`, `outbox_events`, `webhook_deliveries` — _`0009`_
+- [x] Add every index defined in `docs/DATA-MODEL.md`, including partial indexes on hot paths — _all of them, with the documented names. **Spec fix:** `idx_discounts_active` had `now()` in its predicate, which Postgres rejects; the predicate is now `is_active` and the date window belongs to the query_
+- [x] Add `CHECK` constraints: non-negative quantities, non-negative money, valid status values, `total = subtotal + tax + shipping - discount` — _every documented CHECK, plus `>= 0` on the order and order-item discount, shipping, and tax amounts. `tests/integration/test_constraints.py` attempts each §13 invariant against the migrated schema and asserts Postgres rejects it by constraint name_
+- [x] Write the seed script: 50 products with variants and images, 3 collections, 5 discounts, an admin user, a demo customer with order history — _`python -m velo.scripts.seed [--reset]`, or `pnpm db:seed` / `pnpm db:reset`. 50 products, 618 variants with option matrices, stock and images; categories as an `ltree`; shipping and tax rates; `admin@velo.dev` and `customer@velo.dev` (password `ChangeMe123!`, Argon2id); three orders with payments, fulfilments, events, and reviews. Deterministic, refuses production, and consistent: the ledger sums to stock on hand and every paid order has a captured payment (tested)_
+
+**Verified 2026-09-28** on the development machine: `alembic upgrade head` on an empty database, `alembic downgrade base` back to nothing (tables, function, and extensions gone), `alembic check` clean, and the seed loaded. API: ruff, ruff format, and mypy strict clean; 270 tests pass, 26 of them integration against real Postgres and Redis.
 
 **Definition of Done — Phase 4:** `alembic upgrade head` on an empty database produces the full schema; `alembic downgrade base` reverses it cleanly. Seed data loads. The ERD in `docs/DATA-MODEL.md` matches the migrations exactly.
 
@@ -704,3 +706,4 @@ Recorded so they are decisions rather than omissions.
 | 2026-09-26 | **Phase 3 to 22/24 — shadcn/ui vendored, API image verified.** Seven primitives in the storefront behind a token bridge; Button and Toaster rebuilt to DESIGN-SYSTEM.md §4 with 10 tests. The API image had never been able to start (venv path mismatch) — fixed and smoke-tested. Pre-commit Python hooks now run through uv. The web image build filled C: to 0 MB (Docker's disk grew 6.3 → 10 GB) and was stopped; Docker was left unresponsive and the dev containers could not be stopped cleanly.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Claude |
 | 2026-09-26 | **Phase 3 to 23/24 — pre-commit verified.** All 15 hooks pass. Hibernation disabled by the owner (+6.4 GB). The web image is still unbuilt: Docker Desktop's engine did not recover from the full disk, and a scripted restart left it stopped.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Claude |
 | 2026-09-27 | **Phase 3 — web images verified; typed client made real.** Storefront and admin images build and serve; the storefront container renders Postgres data through the API container. Fixed the runtime group (`nogroup` → `nodejs`). Resolving the `schema.d.ts` contradiction found the "typed" client was untyped (`createClient` without `paths`, schema never generated) and the CI stale-client check a no-op. Added `scripts/export_openapi.py`, committed the schema, switched the skeleton page to the client, and corrected `pnpm generate:client` → `generate:api` in README.md and API-SPEC.md. Still 23/24: only the second-machine clean-clone run remains, plus a first CI run once the repository has a remote.                                                                                                                                                                                                                                                     | Claude |
+| 2026-09-28 | **Phase 4 closed** (15/15). SQLAlchemy models for all 38 tables in DATA-MODEL.md, one per domain package; async Alembic with a constraint naming convention and nine migrations (extensions and `uuidv7()`, then one per domain, ordered by foreign-key dependency); the `Money` value object and a `MinorUnits` column type that refuses floats; Argon2id password hashing (brought forward from Phase 5 for the seed's users); and a deterministic seed. Spec fixes recorded in DATA-MODEL.md: Postgres 16 has no `uuidv7()`, and `idx_discounts_active` used `now()` in an index predicate, which Postgres rejects. Also fixed a pre-existing test that failed whenever the developer's `.env` set `VELO_DEBUG=true`.                                                                                                                                                                                                                                                        | Claude |

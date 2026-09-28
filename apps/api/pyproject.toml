@@ -16,6 +16,8 @@ dependencies = [
     "redis>=5.2.0",
     "structlog>=24.4.0",
     "python-ulid>=3.0.0",
+    "alembic>=1.14",
+    "argon2-cffi>=23.1",
 ]
 
 [dependency-groups]
@@ -65,6 +67,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S105", "S106"]  # hard-coded test credentials are fine in tests
+"migrations/versions/**" = ["E501"]  # generated DDL: long constraint expressions read better whole
 
 [tool.ruff.lint.isort]
 known-first-party = ["velo"]

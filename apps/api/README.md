@@ -25,14 +25,25 @@ velo/
 │   ├── errors.py        domain errors → RFC 9457 problem+json
 │   └── middleware.py    correlation ID propagation
 ├── db/
-│   ├── session.py       async engine and per-request sessions
+│   ├── base.py          declarative base, naming convention, column mixins
+│   ├── types.py         MinorUnits (money: BIGINT, refuses floats), Ltree
+│   ├── ids.py           UUIDv7 primary keys
+│   ├── models.py        imports every domain's models — the whole schema
+│   ├── session.py       async engine, per-request sessions, session_scope()
 │   └── redis.py         cache and counters — never a source of truth
 ├── api/
 │   ├── health.py        /health (liveness), /ready (readiness)
 │   └── v1/              versioned routers
-└── domains/             one package per bounded context
-    └── system/          repository + service; the walking-skeleton template
+├── domains/             one package per bounded context; each owns its models.py
+│   ├── system/          repository + service; the walking-skeleton template
+│   └── identity/ catalog/ inventory/ cart/ discounts/ shipping/ checkout/
+│       orders/ payments/ platform/
+└── scripts/
+    └── seed.py          demo data: python -m velo.scripts.seed [--reset]
+migrations/              Alembic: 0001 extensions + uuidv7(), then one per domain
 ```
+
+Models never import another domain's models: a foreign key names the other table as a string (`ForeignKey("users.id")`), and there are no cross-domain relationships.
 
 Rules worth restating, because they are the ones that erode:
 
@@ -49,7 +60,14 @@ uv run ruff format .          # format
 uv run mypy .                 # strict type check
 uv run pytest                 # unit tests — no containers needed
 VELO_RUN_INTEGRATION=1 uv run pytest -m integration   # needs `pnpm infra:up`
+
+uv run alembic upgrade head                        # apply migrations
+uv run alembic downgrade base                      # remove the whole schema
+uv run alembic check                               # fails if the models and migrations differ
+uv run alembic revision --autogenerate -m "add wishlists"   # then review it by hand
 ```
+
+The integration suite wipes and migrates the `velo_test` database, never the development one.
 
 ## Errors
 

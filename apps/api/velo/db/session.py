@@ -8,6 +8,7 @@ thread-safe and is not task-safe.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -66,4 +67,17 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     if _sessionmaker is None:
         raise RuntimeError("Sessionmaker not initialised. init_engine() runs in the lifespan.")
     async with _sessionmaker() as session:
+        yield session
+
+
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
+    """One unit of work outside a request: commit on success, roll back on error.
+
+    For scripts and background jobs, which have no service call to own the
+    transaction. Request handlers use :func:`get_session` instead.
+    """
+    if _sessionmaker is None:
+        raise RuntimeError("Sessionmaker not initialised. Call init_engine() first.")
+    async with _sessionmaker() as session, session.begin():
         yield session

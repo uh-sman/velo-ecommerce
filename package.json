@@ -22,7 +22,10 @@
     "generate:api": "pnpm --filter @velo/api-client generate",
     "infra:up": "docker compose -f docker/docker-compose.dev.yml up -d",
     "infra:down": "docker compose -f docker/docker-compose.dev.yml down",
-    "infra:reset": "docker compose -f docker/docker-compose.dev.yml down -v && pnpm infra:up"
+    "infra:reset": "docker compose -f docker/docker-compose.dev.yml down -v && pnpm infra:up",
+    "db:migrate": "cd apps/api && uv run alembic upgrade head",
+    "db:seed": "cd apps/api && uv run python -m velo.scripts.seed",
+    "db:reset": "cd apps/api && uv run alembic downgrade base && uv run alembic upgrade head && uv run python -m velo.scripts.seed"
   },
   "devDependencies": {
     "@velo/config": "workspace:*",
