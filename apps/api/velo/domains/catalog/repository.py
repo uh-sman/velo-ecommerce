@@ -202,6 +202,27 @@ class ReviewRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class VariantSnapshot:
+    """A variant as a cart line sees it. ``purchasable`` is False once it is gone."""
+
+    variant_id: uuid.UUID
+    product_id: uuid.UUID
+    product_title: str
+    product_slug: str
+    variant_title: str
+    sku: str
+    price_amount: int
+    currency: str
+    compare_at_amount: int | None
+    weight_grams: int
+    requires_shipping: bool
+    is_taxable: bool
+    collection_ids: frozenset[uuid.UUID]
+    image_url: str | None
+    purchasable: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ListingFilter:
     category_path: str | None = None
     collection_slug: str | None = None
@@ -1467,3 +1488,78 @@ class CatalogRepository:
                 )
             ).all()
         )
+
+    # ── Cart support ──────────────────────────────────────────────────────
+
+    async def variant_snapshots(
+        self, variant_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, VariantSnapshot]:
+        """Everything a cart line needs about each variant, deleted ones included."""
+        if not variant_ids:
+            return {}
+        rows = (
+            await self._session.execute(
+                select(
+                    ProductVariant,
+                    Product.title,
+                    Product.slug,
+                    Product.status,
+                    Product.deleted_at,
+                    Product.published_at,
+                )
+                .join(Product, Product.id == ProductVariant.product_id)
+                .where(among(ProductVariant.id, variant_ids))
+            )
+        ).all()
+        product_ids = list({row[0].product_id for row in rows})
+        collections: dict[uuid.UUID, set[uuid.UUID]] = {}
+        if product_ids:
+            for product_id, collection_id in (
+                await self._session.execute(
+                    select(ProductCollection.product_id, ProductCollection.collection_id).where(
+                        among(ProductCollection.product_id, product_ids)
+                    )
+                )
+            ).all():
+                collections.setdefault(product_id, set()).add(collection_id)
+        images = await self._primary_images(product_ids)
+        variant_images = {
+            row.variant_id: row.url
+            for row in (
+                await self._session.scalars(
+                    select(ProductMedia)
+                    .where(among(ProductMedia.variant_id, variant_ids))
+                    .order_by(ProductMedia.position)
+                )
+            ).all()
+            if row.variant_id is not None
+        }
+        now = datetime.now().astimezone()
+        result: dict[uuid.UUID, VariantSnapshot] = {}
+        for variant, title, slug, status, deleted_at, published_at in rows:
+            live = (
+                variant.deleted_at is None
+                and deleted_at is None
+                and status == "active"
+                and published_at is not None
+                and published_at <= now
+            )
+            image = images.get(variant.product_id)
+            result[variant.id] = VariantSnapshot(
+                variant_id=variant.id,
+                product_id=variant.product_id,
+                product_title=title,
+                product_slug=slug,
+                variant_title=variant.title,
+                sku=variant.sku,
+                price_amount=variant.price_amount,
+                currency=variant.price_currency,
+                compare_at_amount=variant.compare_at_amount,
+                weight_grams=variant.weight_grams or 0,
+                requires_shipping=variant.requires_shipping,
+                is_taxable=variant.is_taxable,
+                collection_ids=frozenset(collections.get(variant.product_id, set())),
+                image_url=variant_images.get(variant.id) or (image.url if image else None),
+                purchasable=live,
+            )
+        return result

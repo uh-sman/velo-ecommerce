@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from arq import cron
@@ -37,6 +37,7 @@ from velo.core.meili import MeiliClient, SearchUnavailableError
 from velo.core.storage import MediaStorage
 from velo.db.redis import close_redis, get_redis, init_redis
 from velo.db.session import dispose_engine, init_engine, session_scope
+from velo.domains.cart.service import CartSweeper
 from velo.domains.catalog.cache import CatalogCache
 from velo.domains.catalog.images import InvalidImageError, process
 from velo.domains.catalog.repository import CatalogRepository
@@ -329,6 +330,21 @@ async def reconcile_search(ctx: dict[str, Any]) -> dict[str, int]:
     return {"missing": len(missing), "stale": len(stale)}
 
 
+# ── Carts ─────────────────────────────────────────────────────────────────────
+
+
+async def sweep_carts(ctx: dict[str, Any]) -> dict[str, int]:
+    """Mark idle carts abandoned (for recovery email, Phase 12); drop expired guest carts."""
+    settings = _worker(ctx).settings
+    async with session_scope() as session:
+        result = await CartSweeper(session).sweep(
+            abandon_after=timedelta(hours=settings.cart_abandon_after_hours)
+        )
+    if any(result.values()):
+        logger.info("carts_swept", **result)
+    return result
+
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 
@@ -359,11 +375,12 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions = [relay_outbox, process_media, reindex_search, reconcile_search]  # noqa: RUF012
+    functions = [relay_outbox, process_media, reindex_search, reconcile_search, sweep_carts]  # noqa: RUF012
     cron_jobs = [  # noqa: RUF012
         # The safety net under the post-commit kick: nothing waits longer than this.
         cron(relay_outbox, second={0, 10, 20, 30, 40, 50}, run_at_startup=True, unique=True),
         cron(reconcile_search, minute={17}, unique=True),
+        cron(sweep_carts, minute={5, 20, 35, 50}, unique=True),
     ]
     on_startup = startup
     on_shutdown = shutdown

@@ -169,7 +169,8 @@ async def live_app(
         await connection.execute(
             text(
                 "TRUNCATE users, categories, products, collections, outbox_events, "
-                "audit_log, inventory_movements CASCADE"
+                "audit_log, inventory_movements, carts, discounts, shipping_zones, "
+                "tax_rates CASCADE"
             )
         )
     await engine.dispose()

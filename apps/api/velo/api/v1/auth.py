@@ -12,20 +12,25 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Request, Response, status
 
 from velo.api.cookies import (
+    CART_COOKIE,
     CSRF_COOKIE,
     REFRESH_COOKIE,
+    clear_cart_cookie,
     clear_session_cookies,
     set_csrf_cookie,
     set_session_cookies,
 )
 from velo.api.deps import (
     AuthServiceDep,
+    CartServiceDep,
     ClientDep,
     CurrentUserDep,
     PrincipalDep,
     SettingsDep,
     access_token_from,
 )
+from velo.core.logging import get_logger
+from velo.domains.cart.service import CartService
 from velo.domains.identity.schemas import (
     AuthResponse,
     ChangePasswordRequest,
@@ -41,9 +46,34 @@ from velo.domains.identity.schemas import (
 )
 from velo.domains.identity.service import IssuedSession
 
+logger = get_logger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 NO_CONTENT = status.HTTP_204_NO_CONTENT
+
+
+async def _adopt_guest_cart(
+    request: Request,
+    response: Response,
+    carts: CartService,
+    issued: IssuedSession,
+    settings: SettingsDep,
+) -> None:
+    """The browser's guest cart follows the customer into their account (API-SPEC.md §2).
+
+    A failed merge must not fail the sign-in: the guest cookie stays, and the
+    storefront can call ``POST /cart/merge`` later.
+    """
+    guest_token = request.cookies.get(CART_COOKIE)
+    if not guest_token:
+        return
+    try:
+        await carts.merge(guest_token, issued.user.id)
+    except Exception:
+        logger.exception("cart_merge_at_sign_in_failed")
+        return
+    clear_cart_cookie(response, settings)
 
 
 def _signed_in(response: Response, issued: IssuedSession, settings: SettingsDep) -> AuthResponse:
@@ -69,8 +99,10 @@ async def csrf(request: Request, response: Response, settings: SettingsDep) -> C
 )
 async def register(
     body: RegisterRequest,
+    request: Request,
     response: Response,
     service: AuthServiceDep,
+    carts: CartServiceDep,
     client: ClientDep,
     settings: SettingsDep,
 ) -> AuthResponse:
@@ -82,18 +114,22 @@ async def register(
         marketing_opt_in=body.marketing_opt_in,
         client=client,
     )
+    await _adopt_guest_cart(request, response, carts, issued, settings)
     return _signed_in(response, issued, settings)
 
 
 @router.post("/login", response_model=AuthResponse, summary="Sign in")
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     service: AuthServiceDep,
+    carts: CartServiceDep,
     client: ClientDep,
     settings: SettingsDep,
 ) -> AuthResponse:
     issued = await service.login(email=str(body.email), password=body.password, client=client)
+    await _adopt_guest_cart(request, response, carts, issued, settings)
     return _signed_in(response, issued, settings)
 
 

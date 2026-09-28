@@ -420,6 +420,7 @@ CREATE TABLE carts (
                   CHECK (status IN ('active','converted','abandoned','merged')),
     abandoned_at  TIMESTAMPTZ,
     expires_at    TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 days'),
+    discount_code CITEXT,                 -- the code the customer applied; kept while it does not apply
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT cart_has_owner CHECK (user_id IS NOT NULL OR guest_token IS NOT NULL)
@@ -433,13 +434,14 @@ CREATE TABLE cart_items (
     cart_id     UUID NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
     variant_id  UUID NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
     quantity    INT  NOT NULL CHECK (quantity > 0 AND quantity <= 999),
+    seen_price_amount BIGINT,           -- last price shown, for "price changed" warnings only
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (cart_id, variant_id)        -- one row per variant; changes are quantity changes
 );
 ```
 
-**Note what `cart_items` does not contain: a price.** A cart holds intent — _this variant, this many_. The price is looked up from `product_variants` on every read and every mutation. There is no cached price to go stale and no client-supplied price to tamper with.
+**Note what `cart_items` does not contain: a price it charges.** `seen_price_amount` records what the customer was last shown, so a change can be flagged; it is never charged. A cart holds intent — _this variant, this many_. The price is looked up from `product_variants` on every read and every mutation. There is no cached price to go stale and no client-supplied price to tamper with.
 
 The `UNIQUE (cart_id, variant_id)` constraint turns "add to cart" into an upsert, which makes double-clicking "Add" increment a quantity rather than create a duplicate line.
 
@@ -738,9 +740,16 @@ CREATE TABLE discounts (
     starts_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
     ends_at               TIMESTAMPTZ,
     is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+    buy_quantity          INT,                        -- buy_x_get_y: buy this many...
+    get_quantity          INT,                        -- ...get this many at `value` percent off
+    customer_segment      TEXT NOT NULL DEFAULT 'all'
+                          CHECK (customer_segment IN ('all','returning','subscribers','staff')),
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT within_limit CHECK (max_redemptions IS NULL OR times_redeemed <= max_redemptions),
-    CONSTRAINT valid_window CHECK (ends_at IS NULL OR ends_at > starts_at)
+    CONSTRAINT valid_window CHECK (ends_at IS NULL OR ends_at > starts_at),
+    CONSTRAINT percent_in_range CHECK (type NOT IN ('percentage','buy_x_get_y') OR (value > 0 AND value <= 100)),
+    CONSTRAINT fixed_amount_has_currency CHECK (type <> 'fixed_amount' OR (value > 0 AND currency IS NOT NULL)),
+    CONSTRAINT buy_x_get_y_quantities CHECK (type <> 'buy_x_get_y' OR (buy_quantity >= 1 AND get_quantity >= 1))
 );
 CREATE INDEX idx_discounts_active ON discounts (code)
     WHERE is_active;

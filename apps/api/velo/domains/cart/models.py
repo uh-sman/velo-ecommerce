@@ -11,9 +11,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import CHAR, CheckConstraint, ForeignKey, Index, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from velo.db.base import Base, HasId, HasTimestamps, one_of
+from velo.db.types import MinorUnits
 
 CART_STATUSES = ("active", "converted", "abandoned", "merged")
 
@@ -28,6 +30,9 @@ class Cart(HasId, HasTimestamps, Base):
     status: Mapped[str] = mapped_column(server_default="active")
     abandoned_at: Mapped[datetime | None]
     expires_at: Mapped[datetime] = mapped_column(server_default=text("now() + interval '30 days'"))
+    # The code the customer applied. Kept while it does not apply (a threshold
+    # not yet met), so it starts working as soon as it can.
+    discount_code: Mapped[str | None] = mapped_column(CITEXT)
 
     __table_args__ = (
         one_of("status", *CART_STATUSES),
@@ -51,6 +56,9 @@ class CartItem(HasId, HasTimestamps, Base):
         ForeignKey("product_variants.id", ondelete="CASCADE")
     )
     quantity: Mapped[int]
+    # The unit price last shown to the customer for this line — only to warn
+    # when the price has changed since. Never used to charge (DATA-MODEL.md §6).
+    seen_price_amount: Mapped[int | None] = mapped_column(MinorUnits)
 
     __table_args__ = (
         CheckConstraint("quantity > 0 AND quantity <= 999", name="quantity_range"),

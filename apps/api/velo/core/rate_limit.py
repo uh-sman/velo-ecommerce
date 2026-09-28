@@ -42,6 +42,9 @@ VERIFICATION_PER_EMAIL = Rule("verify-email", 3, 60 * 60)
 TOKEN_REDEEM_PER_IP = Rule("token-ip", 20, 60 * 60)  # verify / reset submissions
 REFRESH_PER_IP = Rule("refresh-ip", 60, 60)
 SEARCH_PER_IP = Rule("search-ip", 60, 60)  # API-SPEC.md §1: search, 60 / min / IP
+CART_MUTATIONS = Rule("cart", 60, 60)  # API-SPEC.md §1: 60 / min / cart
+# Guessing discount codes: generous for a person, useless for a script.
+DISCOUNT_CODE_PER_IP = Rule("discount-code-ip", 20, 60 * 60)
 
 
 @dataclass(frozen=True, slots=True)

@@ -292,6 +292,16 @@ A variant and a quantity. That is the entire vocabulary a client has for influen
 
 `warnings` carries non-fatal problems the customer should see: a price changed since the item was added, stock dropped below the requested quantity, a product was discontinued. The cart is never silently mutated behind the customer's back.
 
+**Estimates.** Every cart endpoint accepts `?country=&region=&postal_code=` to estimate shipping and tax, and `shipping_rate=<id>` to choose from the returned `shipping.options`. The guest cart lives in an HttpOnly `velo_cart` cookie holding an opaque token (only its hash is stored). Signing in or registering merges it into the account's cart, adding quantities of the same variant up to what can be sold; `POST /cart/merge` does the same on demand.
+
+**The response also carries** `discounts` (every discount applied, automatic ones included), `discount_code` (the code the customer entered, whether or not it currently applies), `line_discount` per item, `totals.tax_included` (VAT already inside prices), and `purchasable` per item.
+
+**Warning codes:** `unavailable` (the line is not charged), `price_changed` (with `previous_price`; cleared when the line is next changed), `insufficient_stock`, `quantity_reduced` (a merge was capped by stock), `discount_not_applied`, `discount_outclassed` (a better discount applies instead), `no_shipping`.
+
+**Errors:** `409 not-purchasable`, `409 quantity-unavailable` (the field error says how many can be ordered), `422 currency-mismatch`, `422 discount-code-invalid` with `errors[0].code` one of `unknown`, `not_started`, `expired`, `used_up`, `already_used`, `first_order_only`, `not_eligible`, `min_subtotal`, `no_targets`, `not_enough_items`, `currency`, `nothing_to_ship`. Discount codes are limited to 20 attempts an hour per IP; cart changes to 60 a minute per cart.
+
+How discounts stack, how shipping and tax are chosen, and where rounding happens: [PRICING.md](PRICING.md).
+
 ### Checkout — `/checkout`
 
 | Method | Path                            | Auth     | Idempotent | Description                                         |

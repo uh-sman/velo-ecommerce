@@ -600,6 +600,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The cart, priced and validated */
+        get: operations["get_cart_api_v1_cart_get"];
+        put?: never;
+        post?: never;
+        /** Empty the cart */
+        delete: operations["clear_cart_api_v1_cart_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cart/discount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a discount code */
+        post: operations["apply_code_api_v1_cart_discount_post"];
+        /** Remove the code */
+        delete: operations["remove_code_api_v1_cart_discount_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cart/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add an item */
+        post: operations["add_item_api_v1_cart_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cart/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an item */
+        delete: operations["remove_item_api_v1_cart_items__item_id__delete"];
+        options?: never;
+        head?: never;
+        /** Change a quantity */
+        patch: operations["set_quantity_api_v1_cart_items__item_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/cart/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Merge this browser's guest cart into the signed-in user's (also done at sign-in) */
+        post: operations["merge_api_v1_cart_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/categories": {
         parameters: {
             query?: never;
@@ -859,6 +947,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AddItem
+         * @description A variant and a quantity: the whole vocabulary a client has (API-SPEC.md §2).
+         */
+        AddItem: {
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity: number;
+            /**
+             * Variant Id
+             * Format: uuid
+             */
+            variant_id: string;
+        };
         /** AddressFields */
         AddressFields: {
             /** City */
@@ -1162,6 +1266,21 @@ export interface components {
             /** Weight Grams */
             weight_grams: number | null;
         };
+        /** AppliedDiscountView */
+        AppliedDiscountView: {
+            amount: components["schemas"]["MoneyJson"];
+            /** Code */
+            code: string | null;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /** ApplyCode */
+        ApplyCode: {
+            /** Code */
+            code: string;
+        };
         /** AuthResponse */
         AuthResponse: {
             /**
@@ -1190,6 +1309,57 @@ export interface components {
              * Format: uuid
              */
             variant_id: string;
+        };
+        /** CartItemView */
+        CartItemView: {
+            availability: components["schemas"]["ItemAvailability"];
+            compare_at: components["schemas"]["MoneyJson"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            line_discount: components["schemas"]["MoneyJson"];
+            line_total: components["schemas"]["MoneyJson"];
+            /** Purchasable */
+            purchasable: boolean;
+            /** Quantity */
+            quantity: number;
+            unit_price: components["schemas"]["MoneyJson"];
+            variant: components["schemas"]["VariantRef"];
+        };
+        /** CartView */
+        CartView: {
+            /** Currency */
+            currency: string;
+            discount: components["schemas"]["AppliedDiscountView"] | null;
+            /** Discount Code */
+            discount_code: string | null;
+            /** Discounts */
+            discounts: components["schemas"]["AppliedDiscountView"][];
+            /** Id */
+            id: string | null;
+            /** Item Count */
+            item_count: number;
+            /** Items */
+            items: components["schemas"]["CartItemView"][];
+            shipping: components["schemas"]["ShippingEstimate"] | null;
+            totals: components["schemas"]["Totals"];
+            /** Warnings */
+            warnings: components["schemas"]["CartWarning"][];
+        };
+        /** CartWarning */
+        CartWarning: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "unavailable" | "price_changed" | "insufficient_stock" | "quantity_reduced" | "discount_not_applied" | "discount_outclassed" | "no_shipping";
+            /** Item Id */
+            item_id?: string | null;
+            /** Message */
+            message: string;
+            previous_price?: components["schemas"]["MoneyJson"] | null;
         };
         /** CategoryCreate */
         CategoryCreate: {
@@ -1420,6 +1590,13 @@ export interface components {
              * @default 0
              */
             variants_updated: number;
+        };
+        /** ItemAvailability */
+        ItemAvailability: {
+            /** In Stock */
+            in_stock: boolean;
+            /** Max Quantity */
+            max_quantity: number;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1867,6 +2044,14 @@ export interface components {
             /** User Agent */
             user_agent: string | null;
         };
+        /** SetQuantity */
+        SetQuantity: {
+            /**
+             * Quantity
+             * @description 0 removes the line.
+             */
+            quantity: number;
+        };
         /** SettingsRequest */
         SettingsRequest: {
             /** Allow Backorder */
@@ -1875,6 +2060,28 @@ export interface components {
             reorder_point?: number | null;
             /** Track Inventory */
             track_inventory?: boolean | null;
+        };
+        /** ShippingEstimate */
+        ShippingEstimate: {
+            /** Options */
+            options: components["schemas"]["ShippingOptionView"][];
+            /** Selected Id */
+            selected_id: string | null;
+        };
+        /** ShippingOptionView */
+        ShippingOptionView: {
+            /** Est Days Max */
+            est_days_max: number | null;
+            /** Est Days Min */
+            est_days_min: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            price: components["schemas"]["MoneyJson"];
         };
         /** StockRowView */
         StockRowView: {
@@ -1938,6 +2145,15 @@ export interface components {
         TokenRequest: {
             /** Token */
             token: string;
+        };
+        /** Totals */
+        Totals: {
+            discount: components["schemas"]["MoneyJson"];
+            shipping: components["schemas"]["MoneyJson"] | null;
+            subtotal: components["schemas"]["MoneyJson"];
+            tax: components["schemas"]["MoneyJson"] | null;
+            tax_included: components["schemas"]["MoneyJson"] | null;
+            total: components["schemas"]["MoneyJson"];
         };
         /** UserResponse */
         UserResponse: {
@@ -2049,6 +2265,24 @@ export interface components {
             track_inventory: boolean;
             /** Weight Grams */
             weight_grams?: number | null;
+        };
+        /** VariantRef */
+        VariantRef: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Product Slug */
+            product_slug: string;
+            /** Product Title */
+            product_title: string;
+            /** Sku */
+            sku: string;
+            /** Variant Title */
+            variant_title: string;
         };
         /** VariantUpdate */
         VariantUpdate: {
@@ -3485,6 +3719,294 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cart_api_v1_cart_get: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_cart_api_v1_cart_delete: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_code_api_v1_cart_discount_post: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyCode"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_code_api_v1_cart_discount_delete: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_item_api_v1_cart_items_post: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddItem"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_item_api_v1_cart_items__item_id__delete: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_quantity_api_v1_cart_items__item_id__patch: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetQuantity"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_api_v1_cart_merge_post: {
+        parameters: {
+            query?: {
+                country?: string | null;
+                region?: string | null;
+                postal_code?: string | null;
+                shipping_rate?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CartView"];
+                };
             };
             /** @description Validation Error */
             422: {

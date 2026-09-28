@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # Who hears about low stock. Empty: logged only.
     ops_alert_email: str | None = None
 
+    # ── Cart (Phase 7) ─────────────────────────────────────────────────────
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    # A cart with items, untouched this long, is marked abandoned (for recovery email).
+    cart_abandon_after_hours: int = Field(default=24, ge=1)
+
     # ── Media storage (S3 or R2; MinIO in development) ─────────────────────
     s3_endpoint_url: str | None = None  # None = AWS; set for R2 or MinIO
     s3_region: str = "auto"

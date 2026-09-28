@@ -22,6 +22,8 @@ ACCESS_COOKIE = "velo_access"
 REFRESH_COOKIE = "velo_refresh"
 CSRF_COOKIE = "velo_csrf"
 CSRF_HEADER = "X-CSRF-Token"
+CART_COOKIE = "velo_cart"  # the guest cart's opaque token; HttpOnly
+CART_COOKIE_MAX_AGE = 30 * 24 * 3600
 
 
 def _domain(settings: Settings) -> str | None:
@@ -80,3 +82,20 @@ def set_csrf_cookie(response: Response, settings: Settings, token: str | None = 
         samesite="lax",
     )
     return token
+
+
+def set_cart_cookie(response: Response, token: str, settings: Settings) -> None:
+    response.set_cookie(
+        CART_COOKIE,
+        token,
+        max_age=CART_COOKIE_MAX_AGE,
+        path="/",
+        domain=_domain(settings),
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def clear_cart_cookie(response: Response, settings: Settings) -> None:
+    response.delete_cookie(CART_COOKIE, path="/", domain=_domain(settings))

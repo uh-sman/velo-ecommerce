@@ -23,6 +23,7 @@ from velo.domains.catalog.repository import (
     ListingFilter,
     ProductRecord,
     SortKey,
+    VariantSnapshot,
 )
 from velo.domains.catalog.views import (
     AvailabilityView,
@@ -229,6 +230,12 @@ class CatalogService:
         if product is None or variant is None or variant.product_id != product.id:
             raise NotFoundError("No such product variant.")
         return variant.id
+
+    async def variant_snapshots(
+        self, variant_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, VariantSnapshot]:
+        """For the cart: current price, availability and display data per variant."""
+        return await self._catalog.variant_snapshots(variant_ids)
 
     async def product_id(self, slug: str) -> uuid.UUID:
         product = await self._catalog.product_by_slug(slug)

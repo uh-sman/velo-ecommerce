@@ -25,6 +25,9 @@ from velo.db.types import MinorUnits
 
 DISCOUNT_TYPES = ("percentage", "fixed_amount", "free_shipping", "buy_x_get_y")
 DISCOUNT_TARGETS = ("all", "products", "collections")
+# Who may use a discount, beyond first_order_only. "returning": at least one paid
+# order; "subscribers": opted in to marketing; "staff": any staff role.
+CUSTOMER_SEGMENTS = ("all", "returning", "subscribers", "staff")
 
 
 class Discount(HasId, HasCreatedAt, Base):
@@ -47,6 +50,11 @@ class Discount(HasId, HasCreatedAt, Base):
     starts_at: Mapped[datetime] = mapped_column(server_default=func.now())
     ends_at: Mapped[datetime | None]
     is_active: Mapped[bool] = mapped_column(server_default=text("true"))
+    # buy_x_get_y: buy `buy_quantity` eligible items, get `get_quantity` more at
+    # `value` percent off (100 = free) — the cheapest in each group.
+    buy_quantity: Mapped[int | None]
+    get_quantity: Mapped[int | None]
+    customer_segment: Mapped[str] = mapped_column(server_default="all")
 
     __table_args__ = (
         one_of("type", *DISCOUNT_TYPES),
@@ -55,6 +63,19 @@ class Discount(HasId, HasCreatedAt, Base):
             "max_redemptions IS NULL OR times_redeemed <= max_redemptions", name="within_limit"
         ),
         CheckConstraint("ends_at IS NULL OR ends_at > starts_at", name="valid_window"),
+        one_of("customer_segment", *CUSTOMER_SEGMENTS),
+        CheckConstraint(
+            "type NOT IN ('percentage', 'buy_x_get_y') OR (value > 0 AND value <= 100)",
+            name="percent_in_range",
+        ),
+        CheckConstraint(
+            "type <> 'fixed_amount' OR (value > 0 AND currency IS NOT NULL)",
+            name="fixed_amount_has_currency",
+        ),
+        CheckConstraint(
+            "type <> 'buy_x_get_y' OR (buy_quantity >= 1 AND get_quantity >= 1)",
+            name="buy_x_get_y_quantities",
+        ),
         # Code lookup at checkout. The date window is checked by the query, not
         # the index predicate: Postgres refuses now() in an index predicate,
         # because a predicate must not change meaning over time.

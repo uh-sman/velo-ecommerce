@@ -16,7 +16,7 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from velo.api.cookies import ACCESS_COOKIE
+from velo.api.cookies import ACCESS_COOKIE, CART_COOKIE
 from velo.core.config import Settings, get_settings
 from velo.core.email import Mailer, SmtpMailer
 from velo.core.errors import ForbiddenError, UnauthenticatedError
@@ -27,12 +27,14 @@ from velo.core.security import InvalidTokenError, decode_access_token
 from velo.core.storage import MediaStorage
 from velo.db.redis import get_redis
 from velo.db.session import get_session
+from velo.domains.cart.service import CartOwner, CartService
 from velo.domains.catalog.admin import CatalogAdminService
 from velo.domains.catalog.cache import CatalogCache
 from velo.domains.catalog.csv_io import CatalogCsvService
 from velo.domains.catalog.reviews import ReviewService
 from velo.domains.catalog.search import SearchService
 from velo.domains.catalog.service import CatalogService
+from velo.domains.discounts.service import DiscountService
 from velo.domains.identity.addresses import AddressService
 from velo.domains.identity.breach import BreachChecker, NoBreachChecker, PwnedPasswordsChecker
 from velo.domains.identity.permissions import Permission, has_permission
@@ -40,6 +42,7 @@ from velo.domains.identity.repository import UserRecord
 from velo.domains.identity.service import AuthService, ClientInfo
 from velo.domains.inventory.service import InventoryService
 from velo.domains.platform.events import Actor
+from velo.domains.shipping.service import RulesTaxProvider, ShippingService
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -269,3 +272,36 @@ def staff_actor(
 CatalogWriterDep = Annotated[Actor, Depends(staff_actor(Permission.CATALOG_WRITE))]
 InventoryWriterDep = Annotated[Actor, Depends(staff_actor(Permission.INVENTORY_WRITE))]
 CatalogReaderDep = Annotated[Principal, Depends(require_permission(Permission.ADMIN_ACCESS))]
+
+
+# ── Cart ──────────────────────────────────────────────────────────────────────
+
+
+def get_cart_service(
+    session: SessionDep,
+    settings: SettingsDep,
+    catalog: CatalogServiceDep,
+    inventory: InventoryServiceDep,
+) -> CartService:
+    return CartService(
+        session,
+        catalog=catalog,
+        inventory=inventory,
+        discounts=DiscountService(session),
+        shipping=ShippingService(session),
+        tax=RulesTaxProvider(session),
+        currency=settings.currency,
+    )
+
+
+CartServiceDep = Annotated[CartService, Depends(get_cart_service)]
+
+
+def get_cart_owner(request: Request, principal: OptionalPrincipalDep) -> CartOwner:
+    """A signed-in user's cart, else the browser's guest cart."""
+    if principal is not None:
+        return CartOwner(user_id=principal.user_id)
+    return CartOwner(guest_token=request.cookies.get(CART_COOKIE))
+
+
+CartOwnerDep = Annotated[CartOwner, Depends(get_cart_owner)]

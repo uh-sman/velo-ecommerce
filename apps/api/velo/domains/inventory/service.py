@@ -94,6 +94,26 @@ class InventoryService:
             result[variant_id] = Availability(in_stock=record.sellable, quantity_available=shown)
         return result
 
+    async def sellable_quantities(
+        self, variant_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, int | None]:
+        """How many of each variant can be sold now; None means no limit.
+
+        No limit: stock is not tracked, or backorders are allowed. A variant
+        with no stock record cannot be sold (0).
+        """
+        stock = await self._stock.stock(variant_ids)
+        result: dict[uuid.UUID, int | None] = {}
+        for variant_id in variant_ids:
+            record = stock.get(variant_id)
+            if record is None:
+                result[variant_id] = 0
+            elif not record.track_inventory or record.allow_backorder:
+                result[variant_id] = None
+            else:
+                result[variant_id] = max(record.available, 0)
+        return result
+
     async def stock(self, variant_id: uuid.UUID) -> StockRecord:
         record = (await self._stock.stock([variant_id])).get(variant_id)
         if record is None:
