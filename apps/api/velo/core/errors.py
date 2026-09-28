@@ -116,6 +116,14 @@ class ForbiddenError(DomainError):
     title = "Not permitted"
 
 
+class RateLimitedError(DomainError):
+    """429 — with ``Retry-After`` and the ``X-RateLimit-*`` headers (API-SPEC.md §1)."""
+
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    slug = "rate-limited"
+    title = "Too many requests"
+
+
 class DependencyUnavailableError(DomainError):
     """503 — a dependency we need is not answering. Retryable."""
 

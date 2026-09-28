@@ -1,7 +1,5 @@
 import { createApiClient, type Schema } from "@velo/api-client";
 
-import { ThemeToggle } from "@/components/theme-toggle";
-
 /**
  * The walking skeleton (PLANNING.md Phase 3, M1).
  *
@@ -28,12 +26,12 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-16">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Velo Commerce</h1>
-          <p className="text-text-secondary mt-2">Walking skeleton — Phase 3, milestone M1.</p>
-        </div>
-        <ThemeToggle />
+      <header>
+        <h1 className="text-3xl font-semibold tracking-tight">Velo Commerce</h1>
+        <p className="text-text-secondary mt-2">
+          Walking skeleton. Accounts work: sign in, create an account, and manage your details,
+          addresses, and sessions.
+        </p>
       </header>
 
       <section
@@ -73,7 +71,7 @@ export default async function HomePage() {
       </section>
 
       <footer className="text-text-tertiary text-sm">
-        Next: Phase 4 — database and migrations. See <code className="font-mono">PLANNING.md</code>.
+        Next: Phase 6 — catalog and search. See <code className="font-mono">PLANNING.md</code>.
       </footer>
     </div>
   );

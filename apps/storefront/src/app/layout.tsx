@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import { SiteHeader } from "@/components/site-header";
 import { ThemeScript } from "@/components/theme-script";
+import { Toaster } from "@/components/ui/sonner";
 import { fontVariables } from "./fonts";
 import "./globals.css";
 
@@ -32,7 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main" className="skip-link">
           Skip to content
         </a>
+        <SiteHeader />
         <main id="main">{children}</main>
+        <Toaster />
       </body>
     </html>
   );

@@ -78,7 +78,11 @@ services:
     image: mailhog/mailhog:v1.0.1
     container_name: velo-mailhog
     ports:
-      - "1025:1025" # SMTP
+      # SMTP. Override when the host already holds 1025 — on Windows the
+      # services.exe RPC range can, and it accepts connections without ever
+      # answering, so sends time out rather than fail:
+      #   VELO_MAILHOG_SMTP_PORT=1026 pnpm infra:up   (and VELO_SMTP_PORT=1026)
+      - "${VELO_MAILHOG_SMTP_PORT:-1025}:1025"
       - "8025:8025" # web UI — every email the app sends, readable
     logging:
       driver: none # MailHog logs every connection; it drowns the compose output

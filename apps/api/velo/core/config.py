@@ -55,6 +55,23 @@ class Settings(BaseSettings):
     cookie_domain: str = "localhost"
     cookie_secure: bool = True
 
+    # Password policy: reject passwords found in known breaches (Have I Been
+    # Pwned, k-anonymity — only a 5-character hash prefix leaves the server).
+    breach_check_enabled: bool = True
+    # Behind a trusted proxy the client address is in X-Forwarded-For; trusting
+    # that header without a proxy lets any caller choose their own rate-limit key.
+    trust_forwarded_for: bool = False
+
+    # ── Email (Phase 12 moves sending to a background worker) ──────────────
+    smtp_host: str = "localhost"
+    smtp_port: int = Field(default=1025, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_use_tls: bool = False
+    email_from: str = "orders@velo.example"
+    # Where links in emails point: verify-email and reset-password pages.
+    storefront_url: str = "http://localhost:3000"
+
     # ── CORS ───────────────────────────────────────────────────────────────
     # NoDecode: without it pydantic-settings JSON-decodes list fields from the
     # environment before `_split_origins` runs, and a plain URL is not JSON.

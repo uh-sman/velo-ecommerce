@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from velo import __version__
 from velo.api import health
+from velo.api.csrf import CsrfMiddleware
 from velo.api.v1.router import api_router
 from velo.core.config import Settings, get_settings
 from velo.core.errors import register_exception_handlers
@@ -62,8 +63,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    # Middleware runs bottom-up as registered: correlation wraps the request
-    # first, so every log line including the CORS rejection carries an ID.
+    # The last middleware added is the outermost. CSRF is innermost, so its
+    # 403 still passes back through correlation (request ID) and CORS (headers
+    # the browser needs to read the error).
+    app.add_middleware(CsrfMiddleware, settings=settings)
     app.add_middleware(CorrelationIdMiddleware)
     app.add_middleware(
         CORSMiddleware,

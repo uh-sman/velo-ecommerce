@@ -8,16 +8,23 @@ under test is exactly what ``alembic upgrade head`` produces.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from asgi_lifespan import LifespanManager
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient, Response
+from redis.asyncio import Redis
 from sqlalchemy import NullPool, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
 
 from tests.conftest import TEST_ENV, integration_enabled
+from velo.core.email import InMemoryMailer
 
 API_DIR = Path(__file__).resolve().parents[2]
 
@@ -79,3 +86,107 @@ async def session(connection: AsyncConnection) -> AsyncIterator[AsyncSession]:
         join_transaction_mode="create_savepoint",
     ) as orm_session:
         yield orm_session
+
+
+# ── HTTP: a browser-like client against the real app ─────────────────────────
+
+
+class FakeBreachChecker:
+    """Treats the passwords in ``breached`` as known-breached."""
+
+    def __init__(self, breached: set[str]) -> None:
+        self.breached = breached
+
+    async def is_breached(self, password: str) -> bool:
+        return password in self.breached
+
+
+class Browser:
+    """An httpx client that behaves like a browser against this API.
+
+    Cookies persist across requests, and every mutating request echoes the
+    ``velo_csrf`` cookie in ``X-CSRF-Token``, as the storefront does.
+    """
+
+    def __init__(self, client: AsyncClient) -> None:
+        self.client = client
+
+    @property
+    def csrf(self) -> str:
+        return self.client.cookies.get("velo_csrf") or ""
+
+    async def ensure_csrf(self) -> None:
+        if not self.csrf:
+            await self.client.get("/api/v1/auth/csrf")
+
+    async def get(self, path: str, **kwargs: Any) -> Response:
+        return await self.client.get(path, **kwargs)
+
+    async def send(self, method: str, path: str, **kwargs: Any) -> Response:
+        await self.ensure_csrf()
+        headers = {"X-CSRF-Token": self.csrf, **kwargs.pop("headers", {})}
+        return await self.client.request(method, path, headers=headers, **kwargs)
+
+    async def post(self, path: str, **kwargs: Any) -> Response:
+        return await self.send("POST", path, **kwargs)
+
+    async def patch(self, path: str, **kwargs: Any) -> Response:
+        return await self.send("PATCH", path, **kwargs)
+
+    async def delete(self, path: str, **kwargs: Any) -> Response:
+        return await self.send("DELETE", path, **kwargs)
+
+
+@pytest.fixture
+def mailer() -> InMemoryMailer:
+    return InMemoryMailer()
+
+
+@pytest.fixture
+def breached_passwords() -> set[str]:
+    return set()
+
+
+@pytest.fixture
+async def live_app(
+    app: FastAPI,
+    migrated_database: str,
+    mailer: InMemoryMailer,
+    breached_passwords: set[str],
+) -> AsyncIterator[FastAPI]:
+    """The app with its lifespan running, email captured, and a clean slate after."""
+    from velo.api.deps import get_breach_checker, get_mailer
+
+    app.dependency_overrides[get_mailer] = lambda: mailer
+    app.dependency_overrides[get_breach_checker] = lambda: FakeBreachChecker(breached_passwords)
+    async with LifespanManager(app):
+        yield app
+
+    engine = create_async_engine(migrated_database, poolclass=NullPool)
+    async with engine.begin() as connection:
+        await connection.execute(text("TRUNCATE users CASCADE"))
+    await engine.dispose()
+    redis = Redis.from_url(TEST_ENV["VELO_REDIS_URL"])
+    await redis.flushdb()
+    await redis.aclose()
+
+
+@pytest.fixture
+def new_browser(live_app: FastAPI) -> Callable[[], AbstractAsyncContextManager[Browser]]:
+    """A factory: each call is a separate browser with its own cookie jar."""
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[Browser]:
+        transport = ASGITransport(app=live_app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            yield Browser(client)
+
+    return factory
+
+
+@pytest.fixture
+async def browser(
+    new_browser: Callable[[], AbstractAsyncContextManager[Browser]],
+) -> AsyncIterator[Browser]:
+    async with new_browser() as instance:
+        yield instance
