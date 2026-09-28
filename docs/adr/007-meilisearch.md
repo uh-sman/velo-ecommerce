@@ -80,3 +80,15 @@ The deciding reason is relevance quality per unit of operational effort: it give
 ## Revisit when
 
 The catalog approaches ~500k variants, faceting needs more than about eight dimensions, relevance requires per-user personalisation, or operating the container costs more attention than hosted search would cost in fees.
+
+## Implementation notes (Phase 6, 2026-09-28)
+
+Recorded because each one was found by measurement, and each looks like something a later change might "tidy" away.
+
+- **Searches are GET, on a fresh connection.** A POST goes out as two TCP segments; behind Docker's port relay (and some load balancers) the body waited for a delayed ACK on every reused connection — a flat ~45 ms. Meilisearch also writes small responses as two segments, which stalled ~7% of keep-alive searches on Linux by ~40 ms. GET removes the first; a fresh connection per search (quick-ACK mode) removes the second, for ~1.5 ms of handshake on a local network. `VELO_MEILISEARCH_SEARCH_KEEPALIVE=true` restores keep-alive where the engine is remote and the TLS handshake costs more than the stall.
+- **A circuit breaker** opens for 15 s on any engine failure, so shoppers do not each wait out the timeout while Meilisearch is down; the first search after it expires probes again.
+- **The Postgres fallback resolves the matching product ids once**, from product-level conditions, then pages and counts facets over that list. Recomputing the filtered listing inside each facet query took 49 s on 1,000 products; resolving once takes 40–70 ms.
+- **The relay waits for Meilisearch to apply each batch** before marking its outbox events published, so a failed index task is retried rather than lost. While the engine is unreachable, index events are deferred — not failed, not dead-lettered — and drain when it returns.
+- **A full rebuild** builds `products_build_<ts>` beside the live index and swaps them atomically, then re-syncs every product with an outbox event recorded during the build.
+
+Measured on 1,000 products / 11,701 variants, API and client in Linux containers, one uvicorn worker: search p50 12 ms, p95 15 ms one request at a time (Meilisearch itself: 1 ms); p95 41 ms at 4 concurrent requests. With Meilisearch stopped: p50 39 ms, p95 62 ms, every response `degraded: true`, no errors.

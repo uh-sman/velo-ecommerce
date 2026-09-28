@@ -25,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_e
 
 from tests.conftest import TEST_ENV, integration_enabled
 from velo.core.email import InMemoryMailer
+from velo.core.meili import SearchUnavailableError
+from velo.db.session import session_scope
 
 API_DIR = Path(__file__).resolve().parents[2]
 
@@ -164,7 +166,12 @@ async def live_app(
 
     engine = create_async_engine(migrated_database, poolclass=NullPool)
     async with engine.begin() as connection:
-        await connection.execute(text("TRUNCATE users CASCADE"))
+        await connection.execute(
+            text(
+                "TRUNCATE users, categories, products, collections, outbox_events, "
+                "audit_log, inventory_movements CASCADE"
+            )
+        )
     await engine.dispose()
     redis = Redis.from_url(TEST_ENV["VELO_REDIS_URL"])
     await redis.flushdb()
@@ -190,3 +197,86 @@ async def browser(
 ) -> AsyncIterator[Browser]:
     async with new_browser() as instance:
         yield instance
+
+
+# ── Catalog: staff sign-in and the worker ────────────────────────────────────
+
+STAFF_PASSWORD = "tangerine-ocelot-harbour"
+
+
+async def sign_in_as(browser: Browser, email: str, role: str = "customer") -> Browser:
+    """Register ``email``, give it ``role``, and sign the browser in."""
+    await browser.post("/api/v1/auth/register", json={"email": email, "password": STAFF_PASSWORD})
+    engine = create_async_engine(TEST_ENV["VELO_DATABASE_URL"], poolclass=NullPool)
+    async with engine.begin() as connection:
+        await connection.execute(
+            text("UPDATE users SET role = :role, email_verified_at = now() WHERE email = :email"),
+            {"role": role, "email": email},
+        )
+    await engine.dispose()
+    # The role is in the access token: sign in again to get one that carries it.
+    response = await browser.post(
+        "/api/v1/auth/login", json={"email": email, "password": STAFF_PASSWORD}
+    )
+    assert response.status_code == 200, response.text
+    return browser
+
+
+@pytest.fixture
+async def admin(
+    new_browser: Callable[[], AbstractAsyncContextManager[Browser]],
+) -> AsyncIterator[Browser]:
+    async with new_browser() as instance:
+        yield await sign_in_as(instance, "admin@example.com", "admin")
+
+
+class FakeArqRedis:
+    """Records jobs the relay enqueues, so a test can run them itself."""
+
+    def __init__(self) -> None:
+        self.jobs: list[tuple[str, tuple[Any, ...]]] = []
+
+    async def enqueue_job(self, function: str, *args: Any, **_kwargs: Any) -> None:
+        self.jobs.append((function, args))
+
+
+@pytest.fixture
+async def worker_ctx(live_app: FastAPI, mailer: InMemoryMailer) -> AsyncIterator[dict[str, Any]]:
+    """What arq hands a job: the worker's resources, with email captured.
+
+    Requires the app's lifespan (``live_app``): the worker shares its engine
+    and Redis client. Drops the test search index afterwards.
+    """
+    from velo.core.config import get_settings
+    from velo.worker import Worker
+
+    settings = get_settings()
+    worker = Worker(settings)
+    worker.mailer = mailer
+    ctx: dict[str, Any] = {"worker": worker, "redis": FakeArqRedis()}
+    try:
+        async with session_scope() as session:
+            await worker.indexer(session).ensure_index()
+    except SearchUnavailableError:
+        pytest.skip("Meilisearch is not running")
+    yield ctx
+    try:
+        task = await worker.meili.delete_index(settings.meilisearch_index)
+        if task is not None:
+            await worker.meili.wait_for_task(task)
+    finally:
+        await worker.meili.aclose()
+
+
+async def drain(ctx: dict[str, Any]) -> dict[str, int]:
+    """Run the relay, then any media jobs it queued, until nothing is left."""
+    from velo.worker import process_media, relay_outbox
+
+    totals = await relay_outbox(ctx)
+    jobs: list[tuple[str, tuple[Any, ...]]] = ctx["redis"].jobs
+    while jobs:
+        function, args = jobs.pop(0)
+        if function == "process_media":
+            await process_media(ctx, *args)
+            await relay_outbox(ctx)
+    return totals

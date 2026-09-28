@@ -25,6 +25,10 @@
     "infra:reset": "docker compose -f docker/docker-compose.dev.yml down -v && pnpm infra:up",
     "db:migrate": "cd apps/api && uv run alembic upgrade head",
     "db:seed": "cd apps/api && uv run python -m velo.scripts.seed",
+    "worker": "cd apps/api && uv run arq velo.worker.WorkerSettings",
+    "search:reindex": "cd apps/api && uv run python -m velo.scripts.reindex",
+    "search:check": "cd apps/api && uv run python -m velo.scripts.reindex --check",
+    "storage:init": "cd apps/api && uv run python -m velo.scripts.storage_init",
     "db:reset": "cd apps/api && uv run alembic downgrade base && uv run alembic upgrade head && uv run python -m velo.scripts.seed"
   },
   "devDependencies": {

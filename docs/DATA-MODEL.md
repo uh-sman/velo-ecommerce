@@ -250,6 +250,8 @@ CREATE TABLE variant_option_values (
     option_value_id  UUID NOT NULL REFERENCES option_values(id)    ON DELETE CASCADE,
     PRIMARY KEY (variant_id, option_value_id)
 );
+-- Colour and size filters look variants up by value: the reverse of the key's order.
+CREATE INDEX idx_variant_option_values_value ON variant_option_values (option_value_id);
 
 CREATE TABLE categories (
     id          UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -289,7 +291,8 @@ CREATE TABLE product_media (
     height      INT,                    -- stored so the frontend can reserve space and avoid CLS
     blurhash    TEXT,
     media_type  TEXT NOT NULL DEFAULT 'image' CHECK (media_type IN ('image','video')),
-    position    INT  NOT NULL DEFAULT 0
+    position    INT  NOT NULL DEFAULT 0,
+    renditions  JSONB NOT NULL DEFAULT '[]'  -- resized AVIF/WebP copies: [{width, height, format, url}]
 );
 CREATE INDEX idx_media_product ON product_media (product_id, position);
 
@@ -363,6 +366,19 @@ CREATE TABLE inventory_reservations (
 CREATE INDEX idx_reservations_expiry ON inventory_reservations (expires_at)
     WHERE status = 'active';   -- the sweeper's index
 CREATE INDEX idx_reservations_session ON inventory_reservations (checkout_session_id);
+
+-- "Email me when it is back." One pending request per variant and address;
+-- the row is kept once notified, as a record of what was sent.
+CREATE TABLE back_in_stock_subscriptions (
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
+    variant_id  UUID NOT NULL REFERENCES product_variants(id) ON DELETE CASCADE,
+    email       CITEXT NOT NULL,
+    user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+    notified_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX uq_back_in_stock_pending ON back_in_stock_subscriptions (variant_id, email)
+    WHERE notified_at IS NULL;
 ```
 
 **Available-to-sell is never stored.** It is `quantity_on_hand - quantity_reserved`, computed at read time. A stored derived value is a stored opportunity to be wrong.

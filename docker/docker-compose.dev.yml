@@ -87,7 +87,22 @@ services:
     logging:
       driver: none # MailHog logs every connection; it drowns the compose output
 
+  # Local S3 for product media (Phase 6). Production uses S3 or R2 behind a CDN.
+  # SeaweedFS rather than MinIO: MinIO no longer publishes public images.
+  # Credentials and anonymous read (a CDN origin's behaviour) are in s3.json;
+  # the bucket is created by `pnpm storage:init`.
+  s3:
+    image: chrislusf/seaweedfs:3.97
+    container_name: velo-s3
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -ip.bind=0.0.0.0
+    ports:
+      - "${VELO_S3_PORT:-9000}:8333"
+    volumes:
+      - s3-data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+
 volumes:
   postgres-data:
   redis-data:
   meili-data:
+  s3-data:

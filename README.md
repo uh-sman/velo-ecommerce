@@ -375,39 +375,59 @@ You will also need free accounts at [Stripe](https://stripe.com) (test mode), [R
 
 The walking skeleton (Phase 3). Steps 1–5 are the whole of it; everything after is added by the phase that owns it.
 
+First, from the repository root, create the local environment, start the supporting services, and install the frontend dependencies:
+
 ```bash
-# 1. Clone and enter
+# Clone and enter the repository
 git clone <your-repo-url> velo-commerce
 cd velo-commerce
 
-# 2. Environment
+# Create the local environment file
 cp .env.example .env
-#    The defaults match the dev containers below. VELO_SECRET_KEY is the only
-#    one you must set, and any 32+ character string will do locally.
 
-# 3. Start infrastructure (Postgres 16, Redis 7, Meilisearch, MailHog)
-pnpm infra:up                             # docker compose, under the hood
-#    Port 5432 already taken by a Postgres installed on the host (common on
-#    Windows)? Symptom: "password authentication failed for user velo".
-#    Move the container:  VELO_POSTGRES_PORT=5433 pnpm infra:up
-#    and use port 5433 in VELO_DATABASE_URL.
+# Start Postgres, Redis, Meilisearch, MailHog, and a local S3 (SeaweedFS)
+pnpm infra:up
 
-# 4. API
-cd apps/api
-uv sync --all-groups                      # install, including dev tooling
-uv run alembic upgrade head               # create the schema
-uv run python -m velo.scripts.seed        # demo catalog, admin, and customer
-#    From the repo root instead: pnpm db:migrate, pnpm db:seed,
-#    or pnpm db:reset (drop everything, migrate, seed).
-uv run uvicorn velo.main:app --reload --port 8000
-#    → http://localhost:8000/docs
-#    → http://localhost:8000/api/v1/system/info   (reads Postgres)
+# Create the product-media bucket in the local S3 (once)
+pnpm storage:init
 
-# 5. Frontends (new terminal, from the repo root)
+# Install frontend dependencies
 pnpm install
-pnpm dev                                  # both apps
-#    or: pnpm dev:storefront / pnpm dev:admin
-#    → http://localhost:3000 renders the value the API read from Postgres
+```
+
+The `.env.example` defaults match the development containers. If port 5432 is already in use, start Postgres on another port and update `VELO_DATABASE_URL` in `.env` to use port 5433. In PowerShell, run `$env:VELO_POSTGRES_PORT="5433"; pnpm infra:up`; in Bash, run `VELO_POSTGRES_PORT=5433 pnpm infra:up`. Likewise `VELO_MAILHOG_SMTP_PORT=1026` (with `VELO_SMTP_PORT=1026` in `.env`) if something holds port 1025.
+
+On Docker Desktop for Windows, keep the HTTP service URLs in `.env` on `127.0.0.1` rather than `localhost`: `localhost` resolves to IPv6 first, and Docker's IPv6 port relay adds about 45 ms to every request.
+
+Then run the backend in **Terminal 1**:
+
+```bash
+cd apps/api
+uv sync --all-groups
+uv run alembic upgrade head
+uv run python -m velo.scripts.seed          # 50 products; add --products 1000 for a large catalog
+uv run python -m velo.scripts.reindex       # build the search index from Postgres
+uv run uvicorn velo.main:app --reload --port 8000
+```
+
+The API is at <http://localhost:8000> and its interactive docs are at <http://localhost:8000/docs>. The migration and seed commands can also be run from the repository root with `pnpm db:migrate` and `pnpm db:seed`.
+
+Run the background worker in **Terminal 1b** (Phase 6 onwards). It keeps the search index and catalog cache in step with catalog writes, sends low-stock and back-in-stock emails, and turns uploaded images into responsive AVIF/WebP renditions:
+
+```bash
+cd apps/api
+uv run arq velo.worker.WorkerSettings      # or, from the repo root: pnpm worker
+```
+
+Without the worker the API still works, but search results lag catalog changes until it runs. Emails land in MailHog at <http://localhost:8025>.
+
+Run the frontend in **Terminal 2**, from the repository root:
+
+```bash
+pnpm dev                 # start storefront and admin
+# Or start just one:
+pnpm dev:storefront       # http://localhost:3000
+pnpm dev:admin            # http://localhost:3001
 ```
 
 Checks, from the repo root and from `apps/api`:
@@ -493,7 +513,7 @@ uv run uvicorn velo.main:app --reload       # dev server
 uv run alembic revision --autogenerate -m "add wishlists"
 uv run alembic upgrade head                 # apply migrations
 uv run alembic downgrade -1                 # roll back one
-uv run arq velo.workers.WorkerSettings      # background worker
+uv run arq velo.worker.WorkerSettings       # background worker
 uv run pytest                               # tests
 uv run pytest --cov=velo --cov-report=html  # tests + coverage
 uv run ruff check --fix . && uv run ruff format .
@@ -510,7 +530,10 @@ pnpm generate:api                           # regenerate TS client from OpenAPI 
 # ── Operations ─────────────────────────────────────────────
 pnpm db:seed                                # reseed demo data
 pnpm db:reset                               # drop, migrate, seed
-pnpm search:reindex                         # rebuild Meilisearch index
+pnpm worker                                 # the background worker (outbox relay, images, email)
+pnpm search:reindex                         # rebuild the search index; zero downtime, safe in production
+pnpm search:check                           # report index drift from Postgres; exit 1 if any
+pnpm storage:init                           # create the media bucket if missing
 ```
 
 ---

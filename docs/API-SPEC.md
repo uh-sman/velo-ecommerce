@@ -147,17 +147,18 @@ Never a float, never a pre-formatted string. `amount` is minor units. The client
 
 ### Catalog — `/products`, `/collections`, `/categories`
 
-| Method | Path                       | Auth   | Description                                                                                                                            |
-| ------ | -------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/products`                | —      | List; filter by `category`, `collection`, `min_price`, `max_price`, `in_stock`, `brand`; sort by `price`, `-price`, `newest`, `rating` |
-| GET    | `/products/{slug}`         | —      | Detail with variants, options, media, availability                                                                                     |
-| GET    | `/products/{slug}/related` | —      | Related products                                                                                                                       |
-| GET    | `/products/{slug}/reviews` | —      | Approved reviews, paginated                                                                                                            |
-| POST   | `/products/{slug}/reviews` | access | Submit; verified-purchase badge if an order matches                                                                                    |
-| GET    | `/collections`             | —      | Active collections                                                                                                                     |
-| GET    | `/collections/{slug}`      | —      | Collection with products                                                                                                               |
-| GET    | `/categories`              | —      | Full tree                                                                                                                              |
-| GET    | `/categories/{slug}`       | —      | Category with products, including descendants                                                                                          |
+| Method | Path                             | Auth   | Description                                                                                                                            |
+| ------ | -------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/products`                      | —      | List; filter by `category`, `collection`, `min_price`, `max_price`, `in_stock`, `brand`; sort by `price`, `-price`, `newest`, `rating` |
+| GET    | `/products/{slug}`               | —      | Detail with variants, options, media, availability                                                                                     |
+| GET    | `/products/{slug}/related`       | —      | Related products                                                                                                                       |
+| GET    | `/products/{slug}/reviews`       | —      | Approved reviews, paginated                                                                                                            |
+| POST   | `/products/{slug}/reviews`       | access | Submit; verified-purchase badge if an order matches                                                                                    |
+| POST   | `/products/{slug}/back-in-stock` | —      | `{variant_id, email?}` → 202. Email once when a sold-out variant is sellable again; `email` optional when signed in                    |
+| GET    | `/collections`                   | —      | Active collections                                                                                                                     |
+| GET    | `/collections/{slug}`            | —      | Collection with products                                                                                                               |
+| GET    | `/categories`                    | —      | Full tree                                                                                                                              |
+| GET    | `/categories/{slug}`             | —      | Category with products, including descendants                                                                                          |
 
 **Example — `GET /products/merino-crew-navy`**
 
@@ -201,10 +202,12 @@ Never a float, never a pre-formatted string. `amount` is minor units. The client
 
 ### Search — `/search`
 
-| Method | Path                                      | Description                   |
-| ------ | ----------------------------------------- | ----------------------------- |
-| GET    | `/search?q=&facets=&sort=&limit=&offset=` | Full search with facet counts |
-| GET    | `/search/suggest?q=`                      | Autocomplete, ≤ 8 suggestions |
+| Method | Path                                                                                                         | Description                   |
+| ------ | ------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| GET    | `/search?q=&brand=&category=&collection=&colour=&size=&min_price=&max_price=&in_stock=&sort=&limit=&offset=` | Full search with facet counts |
+| GET    | `/search/suggest?q=`                                                                                         | Autocomplete, ≤ 8 suggestions |
+
+Facet filters repeat for several values (`colour=Navy&colour=Olive` means either); different facets combine with AND. A category matches its descendants. `sort` is `relevance` (default), `price`, `-price`, `newest` or `rating`. Search uses offset paging, capped at 5,000 results: relevance order is not stable enough for cursors.
 
 ```json
 {
@@ -216,9 +219,14 @@ Never a float, never a pre-formatted string. `amount` is minor units. The client
     "size":   { "S": 14, "M": 16, "L": 15 }
   },
   "total_hits": 16,
-  "processing_time_ms": 7
+  "limit": 24,
+  "offset": 0,
+  "processing_time_ms": 7,
+  "degraded": false
 }
 ```
+
+**`degraded: true`** means Meilisearch could not answer and Postgres full-text search did (ADR-007). Results and facets are still correct; typo tolerance and synonyms are not applied. A failing engine opens a 15-second circuit breaker, so searches in that window do not wait on it. Hits carry the same card shape as `/products`; their price and stock are display hints — the product page and cart read Postgres.
 
 ### Cart — `/cart`
 
@@ -341,23 +349,31 @@ Erasure anonymises rather than deletes. Financial records must be retained for t
 
 All require an `admin`, `staff`, or `owner` role. Every mutation writes to `audit_log`.
 
-| Area      | Endpoints                                                                                                                                                 |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Products  | `GET/POST /admin/products`, `GET/PATCH/DELETE /admin/products/{id}`, `POST /admin/products/bulk-import`, `GET /admin/products/export`                     |
-| Variants  | `POST /admin/products/{id}/variants`, `PATCH/DELETE /admin/variants/{id}`                                                                                 |
-| Media     | `POST /admin/media/presign`, `POST /admin/products/{id}/media`, `PATCH /admin/media/{id}`, `DELETE /admin/media/{id}`                                     |
-| Inventory | `GET /admin/inventory`, `POST /admin/inventory/{variant_id}/adjust`, `GET /admin/inventory/{variant_id}/movements`                                        |
-| Orders    | `GET /admin/orders`, `GET /admin/orders/{id}`, `POST /admin/orders/{id}/fulfilments`, `POST /admin/orders/{id}/refunds`, `PATCH /admin/orders/{id}/notes` |
-| Returns   | `GET /admin/returns`, `PATCH /admin/returns/{id}`                                                                                                         |
-| Customers | `GET /admin/customers`, `GET /admin/customers/{id}`                                                                                                       |
-| Discounts | `GET/POST /admin/discounts`, `PATCH/DELETE /admin/discounts/{id}`                                                                                         |
-| Shipping  | `GET/POST /admin/shipping-zones`, `GET/POST /admin/shipping-rates`                                                                                        |
-| Analytics | `GET /admin/analytics/revenue`, `/orders`, `/products`, `/funnel`, `/cohorts`                                                                             |
-| Settings  | `GET/PATCH /admin/settings`                                                                                                                               |
-| Staff     | `GET /admin/staff`, `POST /admin/staff/invite`, `PATCH/DELETE /admin/staff/{id}`                                                                          |
-| Audit     | `GET /admin/audit-log`                                                                                                                                    |
+| Area      | Endpoints                                                                                                                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Products  | `GET/POST /admin/products`, `GET/PATCH/DELETE /admin/products/{id}`, `POST /admin/products/bulk-import`, `GET /admin/products/export`                                   |
+| Variants  | `POST /admin/products/{id}/variants`, `PATCH/DELETE /admin/variants/{id}`                                                                                               |
+| Media     | `POST /admin/media/presign`, `POST /admin/products/{id}/media`, `PATCH /admin/media/{id}`, `DELETE /admin/media/{id}`                                                   |
+| Catalog   | `GET/POST /admin/categories`, `PATCH/DELETE /admin/categories/{id}`, `GET/POST /admin/collections`, `PATCH/DELETE /admin/collections/{id}`                              |
+| Reviews   | `GET /admin/reviews?status=pending`, `PATCH /admin/reviews/{id}` (`approved` \| `rejected`)                                                                             |
+| Inventory | `GET /admin/inventory?low_stock=&q=`, `POST /admin/inventory/{variant_id}/adjust`, `PATCH /admin/inventory/{variant_id}`, `GET /admin/inventory/{variant_id}/movements` |
+| Orders    | `GET /admin/orders`, `GET /admin/orders/{id}`, `POST /admin/orders/{id}/fulfilments`, `POST /admin/orders/{id}/refunds`, `PATCH /admin/orders/{id}/notes`               |
+| Returns   | `GET /admin/returns`, `PATCH /admin/returns/{id}`                                                                                                                       |
+| Customers | `GET /admin/customers`, `GET /admin/customers/{id}`                                                                                                                     |
+| Discounts | `GET/POST /admin/discounts`, `PATCH/DELETE /admin/discounts/{id}`                                                                                                       |
+| Shipping  | `GET/POST /admin/shipping-zones`, `GET/POST /admin/shipping-rates`                                                                                                      |
+| Analytics | `GET /admin/analytics/revenue`, `/orders`, `/products`, `/funnel`, `/cohorts`                                                                                           |
+| Settings  | `GET/PATCH /admin/settings`                                                                                                                                             |
+| Staff     | `GET /admin/staff`, `POST /admin/staff/invite`, `PATCH/DELETE /admin/staff/{id}`                                                                                        |
+| Audit     | `GET /admin/audit-log`                                                                                                                                                  |
 
-`POST /admin/inventory/{variant_id}/adjust` requires a `reason` field. Untraceable stock adjustments are how inventory ledgers stop reconciling.
+`POST /admin/inventory/{variant_id}/adjust` requires a `reason` field. Untraceable stock adjustments are how inventory ledgers stop reconciling. Operators may give `restock` or `return` (must add), `damage` or `theft` (must remove), or `adjustment` (either way, for stocktakes); `sale` and `initial` are written by the system only. An adjustment can never take stock on hand below what checkouts have reserved.
+
+**Permissions.** Catalog reads need `admin:access`; catalog, media, collection, category and review writes need `catalog:write`; stock changes need `inventory:write` — so fulfilment staff can receive stock without editing products.
+
+**Media upload** is three steps, and file bytes never pass through the API: `POST /admin/media/presign` returns a presigned POST whose policy makes the bucket refuse other content types and files over the size limit; the browser sends the file straight to storage; `POST /admin/products/{id}/media` with the returned `key` and required `alt_text` attaches it. The worker then writes AVIF and WebP renditions at 320–1920 px and a blurhash, which appear on the media item's `renditions`, `width`, `height` and `blurhash` within seconds.
+
+**Bulk import** (`POST /admin/products/bulk-import?dry_run=true`) takes the CSV as the raw request body (`Content-Type: text/csv`, UTF-8, at most 5 MB or 10,000 rows) — one row per variant, in the format `GET /admin/products/export` produces. It is all or nothing: any bad row, or `dry_run=true` (the default), rolls everything back and returns the plan and every problem by row and column.
 
 ### Webhooks — `/webhooks`
 

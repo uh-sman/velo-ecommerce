@@ -28,6 +28,9 @@ TEST_ENV = {
     "VELO_REDIS_URL": os.environ.get("VELO_TEST_REDIS_URL", "redis://localhost:6379/1"),
     "VELO_CORS_ORIGINS": "http://localhost:3000",
     "VELO_COOKIE_SECURE": "false",
+    # Never the developer's index: the search tests create and delete this one.
+    "VELO_MEILISEARCH_INDEX": "products_test",
+    "VELO_OPS_ALERT_EMAIL": "ops@example.com",
 }
 
 

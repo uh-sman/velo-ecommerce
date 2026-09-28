@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, func, text
+from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from velo.db.base import Base, HasCreatedAt, HasId, one_of
@@ -62,6 +63,30 @@ class InventoryMovement(HasId, HasCreatedAt, Base):
         one_of("reason", *MOVEMENT_REASONS),
         Index("idx_movements_variant", "variant_id", text("created_at DESC")),
         Index("idx_movements_ref", "reference_type", "reference_id"),
+    )
+
+
+class BackInStockSubscription(HasId, HasCreatedAt, Base):
+    """A "notify me when it is back" request. One live request per variant and address."""
+
+    __tablename__ = "back_in_stock_subscriptions"
+
+    variant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("product_variants.id", ondelete="CASCADE")
+    )
+    email: Mapped[str] = mapped_column(CITEXT)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    notified_at: Mapped[datetime | None]
+
+    __table_args__ = (
+        # Asking twice is harmless; it does not queue two emails.
+        Index(
+            "uq_back_in_stock_pending",
+            "variant_id",
+            "email",
+            unique=True,
+            postgresql_where=text("notified_at IS NULL"),
+        ),
     )
 
 

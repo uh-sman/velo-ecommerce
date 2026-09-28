@@ -63,7 +63,11 @@ ADMIN_EMAIL = "admin@velo.dev"
 CUSTOMER_EMAIL = "customer@velo.dev"
 DEMO_PASSWORD = "ChangeMe123!"  # noqa: S105 — documented in the README; development only
 CURRENCY = "USD"
-PRODUCT_COUNT = 50
+PRODUCT_COUNT = 50  # the documented demo data set; --products N for a larger catalog
+# Beyond the first 50, products take a product-line suffix (so titles stay
+# unique) and rotate through several brands (so the brand facet has values).
+LINES = ["Classic", "Studio", "Trail", "Heritage", "Lite", "Pro", "Everyday II", "Field", "Coast"]
+BRANDS = ["Velo", "Northbound", "Kestrel", "Fieldhouse", "Tideline"]
 CA_TAX_RATE = Decimal("0.0725")
 
 _ORDER_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"  # no 0/O, 1/I/L
@@ -241,6 +245,7 @@ async def _seed_catalog(
     rng: random.Random,
     categories: dict[str, Category],
     admin: User,
+    product_count: int = PRODUCT_COUNT,
 ) -> tuple[list[Product], list[SeededVariant]]:
     products: list[Product] = []
     variants: list[SeededVariant] = []
@@ -253,7 +258,14 @@ async def _seed_catalog(
     ]
     rng.shuffle(names)
 
-    for index, (title, product_type) in enumerate(names[:PRODUCT_COUNT]):
+    base_count = len(names)
+    for extra in range(max(0, product_count - base_count)):
+        title, product_type = names[extra % base_count]
+        names.append((f"{title} {LINES[(extra // base_count) % len(LINES)]}", product_type))
+    if product_count > base_count * (len(LINES) + 1):
+        raise ValueError(f"At most {base_count * (len(LINES) + 1)} products can be generated.")
+
+    for index, (title, product_type) in enumerate(names[:product_count]):
         slug = _slugify(title)
         # Most of the catalog is live; a few drafts and one archived product
         # exercise the storefront's filtering.
@@ -267,7 +279,7 @@ async def _seed_catalog(
                 "worn hard. Designed in-house, made in small runs, and backed by a "
                 "lifetime repair promise."
             ),
-            brand="Velo",
+            brand="Velo" if index < PRODUCT_COUNT else BRANDS[index % len(BRANDS)],
             status=status,
             category_id=categories[product_type.category].id,
             seo_title=f"{title} | Velo",
@@ -715,7 +727,9 @@ async def reset(session: AsyncSession) -> None:
     await session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
 
 
-async def seed(session: AsyncSession, *, random_seed: int = 42) -> SeedResult:
+async def seed(
+    session: AsyncSession, *, random_seed: int = 42, product_count: int = PRODUCT_COUNT
+) -> SeedResult:
     """Load the demo data inside the caller's transaction."""
     existing = await session.scalar(select(func.count()).select_from(User))
     if existing:
@@ -724,7 +738,7 @@ async def seed(session: AsyncSession, *, random_seed: int = 42) -> SeedResult:
     rng = random.Random(random_seed)  # noqa: S311 — demo data, not security
     admin, customer, address = await _seed_users(session)
     categories = await _seed_categories(session)
-    products, variants = await _seed_catalog(session, rng, categories, admin)
+    products, variants = await _seed_catalog(session, rng, categories, admin, product_count)
     await _seed_collections(session, rng, products)
     shipping_rate = await _seed_commerce_rules(session)
     orders = await _seed_order_history(session, rng, customer, address, variants, shipping_rate)
@@ -743,6 +757,12 @@ async def seed(session: AsyncSession, *, random_seed: int = 42) -> SeedResult:
 async def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Load Velo demo data.")
     parser.add_argument("--reset", action="store_true", help="empty every table first")
+    parser.add_argument(
+        "--products",
+        type=int,
+        default=PRODUCT_COUNT,
+        help=f"catalog size (default {PRODUCT_COUNT}; 1000 for the Phase 6 search benchmark)",
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -755,7 +775,7 @@ async def _main(argv: list[str]) -> int:
         async with session_scope() as session:
             if args.reset:
                 await reset(session)
-            result = await seed(session)
+            result = await seed(session, product_count=args.products)
     except RuntimeError as exc:
         sys.stderr.write(f"{exc}\n")
         return 1

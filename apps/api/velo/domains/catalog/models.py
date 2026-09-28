@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     CHAR,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from velo.db.base import (
@@ -149,6 +151,10 @@ class VariantOptionValue(Base):
         ForeignKey("option_values.id", ondelete="CASCADE"), primary_key=True
     )
 
+    # The primary key leads with variant_id. Filtering by colour or size asks the
+    # reverse — which variants have this value — and needs its own index.
+    __table_args__ = (Index("idx_variant_option_values_value", "option_value_id"),)
+
 
 class Collection(HasId, HasCreatedAt, Base):
     __tablename__ = "collections"
@@ -187,6 +193,11 @@ class ProductMedia(HasId, Base):
     blurhash: Mapped[str | None]
     media_type: Mapped[str] = mapped_column(server_default="image")
     position: Mapped[int] = mapped_column(server_default=text("0"))
+    # Resized copies written by the worker: [{"width", "height", "format", "url"}].
+    # Empty until processed, and for media hosted elsewhere.
+    renditions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, server_default=text("'[]'::jsonb")
+    )
 
     __table_args__ = (
         one_of("media_type", "image", "video"),

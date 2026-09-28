@@ -20,15 +20,26 @@ from velo.api.cookies import ACCESS_COOKIE
 from velo.core.config import Settings, get_settings
 from velo.core.email import Mailer, SmtpMailer
 from velo.core.errors import ForbiddenError, UnauthenticatedError
+from velo.core.jobs import JobQueue, get_job_queue
+from velo.core.meili import MeiliClient
 from velo.core.rate_limit import RateLimiter
 from velo.core.security import InvalidTokenError, decode_access_token
+from velo.core.storage import MediaStorage
 from velo.db.redis import get_redis
 from velo.db.session import get_session
+from velo.domains.catalog.admin import CatalogAdminService
+from velo.domains.catalog.cache import CatalogCache
+from velo.domains.catalog.csv_io import CatalogCsvService
+from velo.domains.catalog.reviews import ReviewService
+from velo.domains.catalog.search import SearchService
+from velo.domains.catalog.service import CatalogService
 from velo.domains.identity.addresses import AddressService
 from velo.domains.identity.breach import BreachChecker, NoBreachChecker, PwnedPasswordsChecker
 from velo.domains.identity.permissions import Permission, has_permission
 from velo.domains.identity.repository import UserRecord
 from velo.domains.identity.service import AuthService, ClientInfo
+from velo.domains.inventory.service import InventoryService
+from velo.domains.platform.events import Actor
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -135,3 +146,126 @@ def require_permission(permission: Permission) -> Callable[..., Awaitable[Princi
 
 get_current_admin = require_permission(Permission.ADMIN_ACCESS)
 AdminDep = Annotated[Principal, Depends(get_current_admin)]
+
+
+# ── Catalog, inventory, search ────────────────────────────────────────────────
+
+_meili: MeiliClient | None = None
+_storage: MediaStorage | None = None
+
+
+def get_meili(settings: SettingsDep) -> MeiliClient:
+    """One client per process: it holds a connection pool."""
+    global _meili
+    if _meili is None:
+        _meili = MeiliClient(settings)
+    return _meili
+
+
+async def close_meili() -> None:
+    global _meili
+    if _meili is not None:
+        await _meili.aclose()
+    _meili = None
+
+
+def get_storage(settings: SettingsDep) -> MediaStorage:
+    global _storage
+    if _storage is None:
+        _storage = MediaStorage(settings)
+    return _storage
+
+
+def get_catalog_cache(settings: SettingsDep) -> CatalogCache:
+    return CatalogCache(get_redis(), settings.catalog_cache_ttl_seconds)
+
+
+CacheDep = Annotated[CatalogCache, Depends(get_catalog_cache)]
+JobsDep = Annotated[JobQueue, Depends(get_job_queue)]
+
+
+def get_inventory_service(
+    session: SessionDep, settings: SettingsDep, jobs: JobsDep
+) -> InventoryService:
+    return InventoryService(session, jobs=jobs, display_threshold=settings.stock_display_threshold)
+
+
+InventoryServiceDep = Annotated[InventoryService, Depends(get_inventory_service)]
+
+
+def get_catalog_service(
+    session: SessionDep, cache: CacheDep, inventory: InventoryServiceDep
+) -> CatalogService:
+    return CatalogService(session, cache, inventory)
+
+
+def get_catalog_admin_service(
+    session: SessionDep,
+    cache: CacheDep,
+    inventory: InventoryServiceDep,
+    jobs: JobsDep,
+    storage: Annotated[MediaStorage, Depends(get_storage)],
+) -> CatalogAdminService:
+    return CatalogAdminService(
+        session, cache=cache, inventory=inventory, jobs=jobs, storage=storage
+    )
+
+
+def get_csv_service(
+    session: SessionDep, cache: CacheDep, inventory: InventoryServiceDep, jobs: JobsDep
+) -> CatalogCsvService:
+    return CatalogCsvService(session, cache=cache, inventory=inventory, jobs=jobs)
+
+
+def get_review_service(session: SessionDep, cache: CacheDep, jobs: JobsDep) -> ReviewService:
+    return ReviewService(session, cache, jobs)
+
+
+def get_search_service(
+    session: SessionDep, settings: SettingsDep, meili: Annotated[MeiliClient, Depends(get_meili)]
+) -> SearchService:
+    return SearchService(session, meili, settings.meilisearch_index)
+
+
+CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
+CatalogAdminDep = Annotated[CatalogAdminService, Depends(get_catalog_admin_service)]
+CsvServiceDep = Annotated[CatalogCsvService, Depends(get_csv_service)]
+ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
+SearchServiceDep = Annotated[SearchService, Depends(get_search_service)]
+
+
+def optional_principal(request: Request, settings: SettingsDep) -> Principal | None:
+    """The caller if signed in with a valid token, else None — for routes open to both."""
+    try:
+        return get_current_principal(request, settings)
+    except UnauthenticatedError:
+        return None
+
+
+OptionalPrincipalDep = Annotated[Principal | None, Depends(optional_principal)]
+
+
+def staff_actor(
+    permission: Permission,
+) -> Callable[..., Awaitable[Actor]]:
+    """An admin mutation's actor: permission checked, live account re-read, origin recorded."""
+    guard = require_permission(permission)
+
+    # The guard is a default, not an Annotated[...]: with postponed annotations
+    # FastAPI resolves annotation strings from module globals, where a local
+    # like `guard` does not exist.
+    async def dependency(
+        user: CurrentUserDep,
+        client: ClientDep,
+        principal: Principal = Depends(guard),  # noqa: B008
+    ) -> Actor:
+        del principal  # the guard has done its job
+        return Actor(user_id=user.id, email=user.email, ip=client.ip, user_agent=client.user_agent)
+
+    dependency.__name__ = f"actor_{permission.value.replace(':', '_')}"
+    return dependency
+
+
+CatalogWriterDep = Annotated[Actor, Depends(staff_actor(Permission.CATALOG_WRITE))]
+InventoryWriterDep = Annotated[Actor, Depends(staff_actor(Permission.INVENTORY_WRITE))]
+CatalogReaderDep = Annotated[Principal, Depends(require_permission(Permission.ADMIN_ACCESS))]

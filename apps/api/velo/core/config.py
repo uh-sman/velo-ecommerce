@@ -48,6 +48,29 @@ class Settings(BaseSettings):
     # ── Search ─────────────────────────────────────────────────────────────
     meilisearch_url: str = "http://localhost:7700"
     meilisearch_master_key: SecretStr = SecretStr("")
+    # An alias-like stable name; a full reindex builds a sibling and swaps (ADR-007).
+    meilisearch_index: str = "products"
+    # Beyond this, search falls back to Postgres rather than keep the shopper waiting.
+    meilisearch_timeout_seconds: float = Field(default=1.5, gt=0, le=30)
+    # Reuse connections for searches. Off by default: see velo/core/meili.py.
+    meilisearch_search_keepalive: bool = False
+
+    # ── Catalog ────────────────────────────────────────────────────────────
+    # Exact stock is shown only at or below this (API-SPEC.md §2, "Catalog").
+    stock_display_threshold: int = Field(default=20, ge=0)
+    catalog_cache_ttl_seconds: int = Field(default=300, ge=0)  # 0 disables the cache
+    # Who hears about low stock. Empty: logged only.
+    ops_alert_email: str | None = None
+
+    # ── Media storage (S3 or R2; MinIO in development) ─────────────────────
+    s3_endpoint_url: str | None = None  # None = AWS; set for R2 or MinIO
+    s3_region: str = "auto"
+    s3_bucket: str = "velo-media"
+    s3_access_key_id: SecretStr = SecretStr("")
+    s3_secret_access_key: SecretStr = SecretStr("")
+    # Where the browser fetches media from: a CDN in production.
+    media_public_url: str = "http://localhost:9000/velo-media"
+    media_max_upload_bytes: int = Field(default=20 * 1024 * 1024, ge=1)
 
     # ── Auth (ADR-008) ─────────────────────────────────────────────────────
     access_token_ttl_seconds: int = Field(default=900, ge=60)

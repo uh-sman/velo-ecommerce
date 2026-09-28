@@ -12,12 +12,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import velo.db.models  # noqa: F401 — register every mapper; FKs cross domains
 from velo import __version__
 from velo.api import health
 from velo.api.csrf import CsrfMiddleware
+from velo.api.deps import close_meili
 from velo.api.v1.router import api_router
 from velo.core.config import Settings, get_settings
 from velo.core.errors import register_exception_handlers
+from velo.core.jobs import close_jobs, init_jobs
 from velo.core.logging import configure_logging, get_logger
 from velo.core.middleware import CorrelationIdMiddleware
 from velo.db.redis import close_redis, init_redis
@@ -43,10 +46,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """
         init_engine(settings)
         init_redis(settings)
+        await init_jobs(settings)
         logger.info("api_started", env=settings.env, version=__version__)
         try:
             yield
         finally:
+            await close_meili()
+            await close_jobs()
             await close_redis()
             await dispose_engine()
             logger.info("api_stopped")

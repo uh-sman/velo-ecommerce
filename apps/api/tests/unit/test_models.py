@@ -21,6 +21,7 @@ EXPECTED_TABLES = {
     "categories", "products", "product_variants", "product_options", "option_values",
     "variant_option_values", "collections", "product_collections", "product_media", "reviews",
     "inventory_items", "inventory_movements", "inventory_reservations",
+    "back_in_stock_subscriptions",
     "carts", "cart_items",
     "checkout_sessions", "orders", "order_items", "order_events", "fulfilments",
     "fulfilment_items", "returns", "return_items",

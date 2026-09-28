@@ -8,12 +8,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from velo.api.v1 import account, auth, system
+from velo.api.v1 import account, admin_catalog, admin_inventory, auth, catalog, search, system
 
 api_router = APIRouter()
 api_router.include_router(system.router)
 api_router.include_router(auth.router)
 api_router.include_router(account.router)
+api_router.include_router(catalog.router)
+api_router.include_router(search.router)
+api_router.include_router(admin_catalog.router)
+api_router.include_router(admin_inventory.router)
 
-# Phase 6+ mount here: catalog, inventory, cart, discounts, shipping,
-# checkout, payments, orders, admin.
+# Phase 7+ mount here: cart, discounts, shipping, checkout, payments, orders.

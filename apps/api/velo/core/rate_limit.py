@@ -41,6 +41,7 @@ PASSWORD_RESET_PER_IP = Rule("reset-ip", 10, 60 * 60)
 VERIFICATION_PER_EMAIL = Rule("verify-email", 3, 60 * 60)
 TOKEN_REDEEM_PER_IP = Rule("token-ip", 20, 60 * 60)  # verify / reset submissions
 REFRESH_PER_IP = Rule("refresh-ip", 60, 60)
+SEARCH_PER_IP = Rule("search-ip", 60, 60)  # API-SPEC.md §1: search, 60 / min / IP
 
 
 @dataclass(frozen=True, slots=True)
