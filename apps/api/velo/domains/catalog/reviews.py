@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from velo.core.errors import NotFoundError
@@ -20,8 +21,9 @@ from velo.core.jobs import JobQueue, NullJobQueue
 from velo.core.pagination import CursorPage, PaginationInfo, decode_cursor, encode_cursor
 from velo.domains.catalog.cache import CatalogCache
 from velo.domains.catalog.exceptions import AlreadyReviewedError
+from velo.domains.catalog.models import Review
 from velo.domains.catalog.repository import CatalogRepository, ReviewRecord
-from velo.domains.catalog.schemas import AdminReviewView, ReviewCreate, ReviewView
+from velo.domains.catalog.schemas import AdminReviewView, ReviewCreate, ReviewSummary, ReviewView
 from velo.domains.platform.events import Actor, record_audit, record_event
 
 
@@ -75,6 +77,22 @@ class ReviewService:
                 next_cursor=_page_cursor("reviews", items, has_more), has_more=has_more, limit=limit
             ),
         )
+
+    async def summary(self, slug: str) -> ReviewSummary:
+        product = await self._catalog.product_by_slug(slug)
+        if product is None:
+            raise NotFoundError("No such product.")
+        rows = await self._session.execute(
+            select(Review.rating, func.count())
+            .where(Review.product_id == product.id, Review.status == "approved")
+            .group_by(Review.rating)
+        )
+        distribution = {str(star): 0 for star in range(1, 6)}
+        for rating, count in rows.all():
+            distribution[str(rating)] = int(count)
+        total = sum(distribution.values())
+        average = sum(int(star) * n for star, n in distribution.items()) / total if total else 0.0
+        return ReviewSummary(average=round(average, 2), count=total, distribution=distribution)
 
     async def submit(self, slug: str, user_id: uuid.UUID, body: ReviewCreate) -> ReviewView:
         product = await self._catalog.product_by_slug(slug)

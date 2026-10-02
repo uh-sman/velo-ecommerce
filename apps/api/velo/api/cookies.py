@@ -5,6 +5,8 @@
 | `velo_access`  | HttpOnly; Secure; SameSite=Lax          | `/`                    |
 | `velo_refresh` | HttpOnly; Secure; SameSite=Lax          | `/api/v1/auth/refresh` |
 | `velo_csrf`    | Secure; SameSite=Lax — readable by JS   | `/`                    |
+| `velo_cart`    | HttpOnly; Secure; SameSite=Lax          | `/`                    |
+| `velo_checkout`| HttpOnly; Secure; SameSite=Lax          | `/api/v1`              |
 
 The refresh cookie's narrow path means the browser sends it to one endpoint
 and nowhere else, so it never rides along on an ordinary request.
@@ -24,6 +26,9 @@ CSRF_COOKIE = "velo_csrf"
 CSRF_HEADER = "X-CSRF-Token"
 CART_COOKIE = "velo_cart"  # the guest cart's opaque token; HttpOnly
 CART_COOKIE_MAX_AGE = 30 * 24 * 3600
+# Proves a browser owns a checkout session (API-SPEC.md §2, "Checkout"); HttpOnly.
+CHECKOUT_COOKIE = "velo_checkout"
+CHECKOUT_COOKIE_MAX_AGE = 24 * 3600
 
 
 def _domain(settings: Settings) -> str | None:
@@ -99,3 +104,16 @@ def set_cart_cookie(response: Response, token: str, settings: Settings) -> None:
 
 def clear_cart_cookie(response: Response, settings: Settings) -> None:
     response.delete_cookie(CART_COOKIE, path="/", domain=_domain(settings))
+
+
+def set_checkout_cookie(response: Response, token: str, settings: Settings) -> None:
+    response.set_cookie(
+        CHECKOUT_COOKIE,
+        token,
+        max_age=CHECKOUT_COOKIE_MAX_AGE,
+        path=settings.api_prefix,  # only the API needs it
+        domain=_domain(settings),
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite="lax",
+    )

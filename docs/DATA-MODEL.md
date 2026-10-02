@@ -311,6 +311,15 @@ CREATE TABLE reviews (
 CREATE INDEX idx_reviews_product ON reviews (product_id, created_at DESC) WHERE status = 'approved';
 CREATE UNIQUE INDEX uq_review_per_order_product ON reviews (user_id, product_id, order_id)
     WHERE user_id IS NOT NULL AND order_id IS NOT NULL;
+
+-- Saved for later (Phase 10.5). Products, not variants: the size is chosen at purchase.
+CREATE TABLE wishlist_items (
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_id  UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, product_id)
+);
+CREATE INDEX idx_wishlist_user ON wishlist_items (user_id, created_at DESC);
 ```
 
 **Why `width` and `height` are stored:** the frontend needs intrinsic dimensions to reserve layout space before the image loads. Without them, images pop in and shift the page — Cumulative Layout Shift, a Core Web Vitals failure and a genuinely bad experience on mobile.
@@ -470,6 +479,9 @@ CREATE TABLE checkout_sessions (
     shipping_amount      BIGINT   NOT NULL DEFAULT 0 CHECK (shipping_amount >= 0),
     tax_amount           BIGINT   NOT NULL DEFAULT 0 CHECK (tax_amount      >= 0),
     total_amount         BIGINT   NOT NULL DEFAULT 0 CHECK (total_amount    >= 0),
+    -- What the totals were computed from: the fixed items, the priced lines,
+    -- discounts, tax lines, the shipping choice. Order lines are copied from it (0012).
+    snapshot             JSONB    NOT NULL DEFAULT '{}',
 
     expires_at           TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '30 minutes'),
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -482,6 +494,7 @@ CREATE TABLE checkout_sessions (
 );
 CREATE INDEX idx_checkout_expiry ON checkout_sessions (expires_at)
     WHERE status NOT IN ('confirmed','failed','expired');
+CREATE INDEX idx_checkout_cart ON checkout_sessions (cart_id);  -- retire a cart's older checkouts
 
 CREATE TABLE orders (
     id                   UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -638,7 +651,7 @@ CREATE TABLE payments (
     order_id             UUID REFERENCES orders(id) ON DELETE SET NULL, -- NULL until webhook creates the order
     checkout_session_id  UUID NOT NULL REFERENCES checkout_sessions(id),
     provider             TEXT NOT NULL CHECK (provider IN ('stripe','paystack','flutterwave')),
-    provider_intent_id   TEXT NOT NULL,
+    provider_intent_id   TEXT,          -- NULL between writing the payment and the provider's answer (0012)
     provider_charge_id   TEXT,
     status               TEXT NOT NULL DEFAULT 'pending' CHECK (status IN
                            ('pending','requires_action','processing','succeeded','failed','cancelled')),
@@ -658,6 +671,7 @@ CREATE TABLE payments (
     CONSTRAINT capture_within_amount CHECK (amount_captured <= amount)
 );
 CREATE INDEX idx_payments_order ON payments (order_id);
+CREATE INDEX idx_payments_session ON payments (checkout_session_id);
 -- The reconciliation job's index: stranded payments in a non-terminal state.
 CREATE INDEX idx_payments_pending ON payments (created_at)
     WHERE status IN ('pending','processing','requires_action');
@@ -674,6 +688,10 @@ CREATE TABLE payment_events (
     processed_at        TIMESTAMPTZ,
     processing_error    TEXT,
     received_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Processing retries (0012): five attempts with backoff, then the dead-letter queue.
+    attempts            INT NOT NULL DEFAULT 0,
+    next_attempt_at     TIMESTAMPTZ,
+    dead_lettered_at    TIMESTAMPTZ,
 
     -- This is the entire replay defence. A duplicate delivery violates the
     -- unique constraint, is caught, acknowledged with 200, and dropped.
@@ -681,6 +699,8 @@ CREATE TABLE payment_events (
 );
 CREATE INDEX idx_payment_events_unprocessed ON payment_events (received_at)
     WHERE processed_at IS NULL;
+CREATE INDEX idx_payment_events_dead ON payment_events (dead_lettered_at)
+    WHERE dead_lettered_at IS NOT NULL;
 
 CREATE TABLE refunds (
     id                  UUID PRIMARY KEY DEFAULT uuidv7(),
@@ -696,9 +716,30 @@ CREATE TABLE refunds (
                         CHECK (status IN ('pending','succeeded','failed','cancelled')),
     actor_id            UUID REFERENCES users(id),
     note                TEXT,
+    -- Written before the provider is called; set once it has answered. A pending
+    -- refund with no submitted_at after a crash is resubmitted by reconciliation,
+    -- under its own id as the idempotency key (PAYMENTS-AND-CHECKOUT.md §8).
+    submitted_at        TIMESTAMPTZ,
+    attempts            INT NOT NULL DEFAULT 0,
+    last_error          TEXT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_refunds_order ON refunds (order_id);
+CREATE INDEX idx_refunds_order   ON refunds (order_id);
+CREATE INDEX idx_refunds_payment ON refunds (payment_id);
+CREATE INDEX idx_refunds_unsubmitted ON refunds (created_at)
+    WHERE status = 'pending' AND submitted_at IS NULL;
+
+-- Which lines a refund paid back. A line can be refunded in parts, never beyond
+-- what was bought; restock = the units came off the order before shipping.
+CREATE TABLE refund_items (
+    refund_id      UUID NOT NULL REFERENCES refunds(id) ON DELETE CASCADE,
+    order_item_id  UUID NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
+    quantity       INT    NOT NULL CHECK (quantity > 0),
+    amount         BIGINT NOT NULL CHECK (amount >= 0),
+    restock        BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (refund_id, order_item_id)
+);
+CREATE INDEX idx_refund_items_item ON refund_items (order_item_id);
 
 CREATE TABLE idempotency_keys (
     key                UUID PRIMARY KEY,

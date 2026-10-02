@@ -12,12 +12,23 @@ Rules:
 - Crossing the reorder point raises one low-stock alert; going from sold out
   to available notifies back-in-stock subscribers. Both are outbox events,
   delivered by the worker after commit.
+
+**Reservations — the oversell guard** (DATA-MODEL.md §5). A checkout reserves
+its lines inside the transaction that creates it, holding each stock row with
+``SELECT ... FOR UPDATE`` — in variant order, so checkouts that share SKUs
+cannot deadlock. ``quantity_reserved`` rises; on-hand does not move until
+payment. On payment the reservation is committed: on-hand and reserved fall
+together and a ``sale`` movement is written, in the order's transaction. On
+expiry or abandonment it is released: reserved falls, nothing else. Stock that
+is not tracked, or may be backordered, is not reserved — it cannot run out.
+
+The reservation methods run inside the caller's transaction and never commit.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -29,6 +40,8 @@ from velo.domains.inventory.exceptions import (
     AlreadyInStockError,
     InsufficientStockError,
     InvalidAdjustmentError,
+    OutOfStockError,
+    Shortfall,
 )
 from velo.domains.inventory.repository import (
     InventoryRepository,
@@ -319,6 +332,150 @@ class InventoryService:
         if label is None:
             raise NotFoundError("No such variant.")
         return label
+
+    # ── Reservations (checkout) ───────────────────────────────────────────
+
+    async def reserve(
+        self, session_id: uuid.UUID, quantities: Mapping[uuid.UUID, int], expires_at: datetime
+    ) -> None:
+        """Hold stock for a checkout — every line or none: :class:`OutOfStockError` if short."""
+        variant_ids = sorted(quantities)
+        stock = await self._stock.lock_many(variant_ids)
+        shortfalls: list[Shortfall] = []
+        held: list[tuple[uuid.UUID, int]] = []
+        for variant_id in variant_ids:
+            quantity = quantities[variant_id]
+            record = stock.get(variant_id)
+            if record is None:
+                shortfalls.append(Shortfall(variant_id, quantity, 0))
+            elif not record.track_inventory or record.allow_backorder:
+                continue
+            elif record.available < quantity:
+                shortfalls.append(Shortfall(variant_id, quantity, max(record.available, 0)))
+            else:
+                held.append((variant_id, quantity))
+        if shortfalls:
+            raise OutOfStockError(shortfalls)
+        for variant_id, quantity in held:
+            await self._stock.add_reservation(variant_id, session_id, quantity, expires_at)
+            await self._stock.add_reserved(variant_id, quantity)
+
+    async def extend(self, session_id: uuid.UUID, expires_at: datetime) -> None:
+        await self._stock.extend_reservations(session_id, expires_at)
+
+    async def release(self, session_id: uuid.UUID, *, status: str = "released") -> int:
+        """Give a checkout's held stock back. Returns how many reservations it had."""
+        await self._stock.lock_many(await self._stock.reserved_variants(session_id))
+        reservations = await self._stock.active_reservations(session_id)
+        for reservation in reservations:
+            await self._stock.add_reserved(reservation.variant_id, -reservation.quantity)
+        await self._stock.set_reservation_status([r.id for r in reservations], status)
+        return len(reservations)
+
+    async def commit_sale(
+        self, session_id: uuid.UUID, quantities: Mapping[uuid.UUID, int], order_id: uuid.UUID
+    ) -> list[Shortfall]:
+        """Turn a paid checkout's reservations into a sale, in the order's transaction.
+
+        Returns what could not be taken from stock. Normally nothing: it was
+        reserved. But a payment can arrive after its reservation lapsed (a late
+        webhook, reconciliation), or a line may be on backorder. The money has
+        been taken, so the sale is recorded anyway and the shortfall reported
+        for the order to be flagged — never refused.
+        """
+        held = await self._stock.reserved_variants(session_id)
+        variant_ids = sorted(set(quantities) | set(held))
+        stock = await self._stock.lock_many(variant_ids)
+        reservations = await self._stock.active_reservations(session_id)
+        ours: dict[uuid.UUID, int] = {}
+        for reservation in reservations:
+            ours[reservation.variant_id] = (
+                ours.get(reservation.variant_id, 0) + reservation.quantity
+            )
+
+        shortfalls: list[Shortfall] = []
+        for variant_id in variant_ids:
+            record = stock.get(variant_id)
+            wanted = quantities.get(variant_id, 0)
+            if record is None:
+                if wanted:
+                    shortfalls.append(Shortfall(variant_id, wanted, 0))
+                continue
+            others = record.quantity_reserved - ours.get(variant_id, 0)
+            # Untracked stock has no count to take from. Otherwise on-hand may
+            # fall to what other checkouts hold, and no further.
+            taken = (
+                0
+                if not record.track_inventory
+                else min(wanted, max(record.quantity_on_hand - others, 0))
+            )
+            if record.track_inventory and taken < wanted:
+                shortfalls.append(Shortfall(variant_id, wanted, taken))
+            if not taken and variant_id not in ours:
+                continue
+            after = await self._stock.update(
+                variant_id,
+                quantity_on_hand=record.quantity_on_hand - taken,
+                quantity_reserved=others,
+            )
+            if taken:
+                await self._stock.add_movement(
+                    variant_id=variant_id,
+                    quantity_delta=-taken,
+                    reason="sale",
+                    reference_type="order",
+                    reference_id=order_id,
+                )
+                label = await self._stock.variant_label(variant_id)
+                if label is not None:
+                    self._announce(label, record, after)
+        await self._stock.set_reservation_status([r.id for r in reservations], "committed")
+        return shortfalls
+
+    # ── After the sale (orders, Phase 9) ──────────────────────────────────
+
+    async def taken_for_order(self, order_id: uuid.UUID) -> dict[uuid.UUID, int]:
+        """Units the order still holds out of stock: its sales, less what came back.
+
+        Read from the ledger rather than the order lines, because a paid order
+        whose reservation had lapsed may have taken less than it bought
+        (:meth:`commit_sale`). Putting back more than was taken would invent stock.
+        """
+        totals = await self._stock.reference_totals("order", order_id)
+        return {variant_id: -net for variant_id, net in totals.items() if net < 0}
+
+    async def return_to_stock(
+        self,
+        quantities: Mapping[uuid.UUID, int],
+        *,
+        reference_type: str,
+        reference_id: uuid.UUID,
+        actor_id: uuid.UUID | None,
+        note: str | None = None,
+    ) -> None:
+        """Put units back on the shelf, with a ``return`` movement each. Caller commits."""
+        variant_ids = sorted(v for v, qty in quantities.items() if qty > 0)
+        stock = await self._stock.lock_many(variant_ids)
+        for variant_id in variant_ids:
+            record = stock.get(variant_id)
+            if record is None:
+                continue  # the variant was deleted since; nothing to put back on
+            quantity = quantities[variant_id]
+            after = await self._stock.update(
+                variant_id, quantity_on_hand=record.quantity_on_hand + quantity
+            )
+            await self._stock.add_movement(
+                variant_id=variant_id,
+                quantity_delta=quantity,
+                reason="return",
+                reference_type=reference_type,
+                reference_id=reference_id,
+                actor_id=actor_id,
+                note=note,
+            )
+            label = await self._stock.variant_label(variant_id)
+            if label is not None:
+                self._announce(label, record, after)
 
     # ── Back in stock ─────────────────────────────────────────────────────
 

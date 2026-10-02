@@ -31,6 +31,7 @@ TEST_ENV = {
     # Never the developer's index: the search tests create and delete this one.
     "VELO_MEILISEARCH_INDEX": "products_test",
     "VELO_OPS_ALERT_EMAIL": "ops@example.com",
+    "VELO_TRACKING_WEBHOOK_SECRET": "tracking-webhook-secret",
 }
 
 

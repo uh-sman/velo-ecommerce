@@ -25,6 +25,7 @@ dependencies = [
     "arq>=0.28.0",
     "boto3>=1.35",
     "pillow>=11.3",
+    "fpdf2>=2.8",
 ]
 
 [dependency-groups]

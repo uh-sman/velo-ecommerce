@@ -195,6 +195,15 @@ class ReviewView(BaseModel):
     created_at: datetime
 
 
+class ReviewSummary(BaseModel):
+    """Approved reviews at a glance: the bars above the review list."""
+
+    average: float
+    count: int
+    # "1" … "5" → how many approved reviews gave that many stars.
+    distribution: dict[str, int]
+
+
 class AdminReviewView(ReviewView):
     product_id: uuid.UUID
     user_id: uuid.UUID | None

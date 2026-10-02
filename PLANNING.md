@@ -2,8 +2,8 @@
 
 > **This is the working document.** Every task below has a checkbox. Tick it when the task meets its Definition of Done. Update the progress table at the top as phases complete.
 >
-> **Last updated:** 2026-09-28
-> **Current phase:** Phase 8 — Checkout & Payments. Phase 7 is complete: the pricing engine has 100% branch coverage and Hypothesis property tests, every discount type and stacking combination is tested, and no request can carry a price. Phase 6 is complete (19/19, milestone M2): 1,000 seeded products are browsable, filterable and searchable; search p95 is 15 ms; stopping Meilisearch degrades search to Postgres. Phase 5 is complete (15/16; only the optional OAuth task is open): the full signup → verify → login → refresh → logout → reset cycle works through the API and in the browser. Phase 4 is complete (15/15): the full schema migrates up and down, matches the models exactly, and seeds. Phase 3 is 23/24 — the clean-clone run on a second machine and a first green CI run on GitHub remain. Phases 0 and 1 are complete; Phase 2 is 16/17.
+> **Last updated:** 2026-09-29
+> **Current phase:** Phase 11 — Admin Dashboard. **Phase 10 is built (35/35):** the storefront has its shell (mega-nav, search overlay, cart drawer, footer, error boundaries), listings with URL filters, the full product page with gallery, reviews and structured data, the checkout, and the account area — orders with per-parcel tracking, cancellation, returns, wishlist; it closes after a manual pass at 320 px / 2560 px, in both themes, by keyboard and with a screen reader. **Phase 9 is complete (13/13):** an operator can take an order from paid to delivered, ship it in parts, cancel it before shipping, process a partial return, and refund lines, shipping or goodwill — all through the API, bounded by the capture ledger, idempotent, and in the audit trail. **Phase 8 is built (34/34):** the storefront has the cart, the four-step checkout with the Stripe Payment Element (Paystack for African currencies), and the confirmation page; M3's live test-card purchase is the one check left, and it needs Stripe test keys in `.env`. Phase 7 is complete: the pricing engine has 100% branch coverage and Hypothesis property tests, every discount type and stacking combination is tested, and no request can carry a price. Phase 6 is complete (19/19, milestone M2): 1,000 seeded products are browsable, filterable and searchable; search p95 is 15 ms; stopping Meilisearch degrades search to Postgres. Phase 5 is complete (15/16; only the optional OAuth task is open): the full signup → verify → login → refresh → logout → reset cycle works through the API and in the browser. Phase 4 is complete (15/15): the full schema migrates up and down, matches the models exactly, and seeds. Phase 3 is 23/24 — the clean-clone run on a second machine and a first green CI run on GitHub remain. Phases 0 and 1 are complete; Phase 2 is 16/17.
 
 ---
 
@@ -29,28 +29,28 @@
 
 ## Progress
 
-| #   | Phase                           |   Tasks |   Done | Status                                       | Est.          |
-| --- | ------------------------------- | ------: | -----: | -------------------------------------------- | ------------- |
-| 0   | Discovery & Definition          |      14 |     13 | ✅ Done — 1 standing                         | 3 d           |
-| 1   | Architecture & Decisions        |      12 |     12 | ✅ Done                                      | 3 d           |
-| 2   | UX & Visual Design              |      17 |     16 | 🚧 1 left — prototype                        | 5 d           |
-| 3   | Foundation & Dev Environment    |      24 |     23 | 🚧 1 left — clean-clone run on a 2nd machine | 4 d           |
-| 4   | Database & Migrations           |      15 |     15 | ✅ Done                                      | 4 d           |
-| 5   | Identity & Access               |      16 |     15 | ✅ Done — OAuth (optional) not started       | 5 d           |
-| 6   | Catalog & Search                |      19 |     19 | ✅ Done                                      | 7 d           |
-| 7   | Cart & Pricing Engine           |      12 |     12 | ✅ Done                                      | 5 d           |
-| 8   | Checkout & Payments             |      34 |      0 | 🔜 Not started                               | 10 d          |
-| 9   | Orders, Fulfilment & Returns    |      13 |      0 | 🔜 Not started                               | 6 d           |
-| 10  | Storefront UI                   |      35 |      0 | 🔜 Not started                               | 12 d          |
-| 11  | Admin Dashboard                 |      18 |      0 | 🔜 Not started                               | 10 d          |
-| 12  | Notifications & Background Jobs |      12 |      0 | 🔜 Not started                               | 4 d           |
-| 13  | Testing & QA                    |      15 |      0 | 🔜 Not started                               | 6 d           |
-| 14  | Performance & SEO               |      13 |      0 | 🔜 Not started                               | 4 d           |
-| 15  | Security Hardening              |      16 |      0 | 🔜 Not started                               | 5 d           |
-| 16  | Observability                   |      10 |      0 | 🔜 Not started                               | 3 d           |
-| 17  | Deployment & Launch             |      21 |      0 | 🔜 Not started                               | 5 d           |
-| 18  | Post-Launch                     |      10 |      0 | 🔜 Not started                               | ongoing       |
-|     | **Total**                       | **326** | **68** | **21%**                                      | **~19 weeks** |
+| #   | Phase                           |   Tasks |    Done | Status                                       | Est.          |
+| --- | ------------------------------- | ------: | ------: | -------------------------------------------- | ------------- |
+| 0   | Discovery & Definition          |      14 |      13 | ✅ Done — 1 standing                         | 3 d           |
+| 1   | Architecture & Decisions        |      12 |      12 | ✅ Done                                      | 3 d           |
+| 2   | UX & Visual Design              |      17 |      16 | 🚧 1 left — prototype                        | 5 d           |
+| 3   | Foundation & Dev Environment    |      24 |      23 | 🚧 1 left — clean-clone run on a 2nd machine | 4 d           |
+| 4   | Database & Migrations           |      15 |      15 | ✅ Done                                      | 4 d           |
+| 5   | Identity & Access               |      16 |      15 | ✅ Done — OAuth (optional) not started       | 5 d           |
+| 6   | Catalog & Search                |      19 |      19 | ✅ Done                                      | 7 d           |
+| 7   | Cart & Pricing Engine           |      12 |      12 | ✅ Done                                      | 5 d           |
+| 8   | Checkout & Payments             |      34 |      34 | ✅ Built — live card run needs Stripe keys   | 10 d          |
+| 9   | Orders, Fulfilment & Returns    |      13 |      13 | ✅ Done                                      | 6 d           |
+| 10  | Storefront UI                   |      35 |      35 | 🚧 Built — manual viewport/a11y pass left    | 12 d          |
+| 11  | Admin Dashboard                 |      18 |       0 | 🔜 Not started                               | 10 d          |
+| 12  | Notifications & Background Jobs |      12 |       0 | 🔜 Not started                               | 4 d           |
+| 13  | Testing & QA                    |      15 |       0 | 🔜 Not started                               | 6 d           |
+| 14  | Performance & SEO               |      13 |       0 | 🔜 Not started                               | 4 d           |
+| 15  | Security Hardening              |      16 |       0 | 🔜 Not started                               | 5 d           |
+| 16  | Observability                   |      10 |       0 | 🔜 Not started                               | 3 d           |
+| 17  | Deployment & Launch             |      21 |       0 | 🔜 Not started                               | 5 d           |
+| 18  | Post-Launch                     |      10 |       0 | 🔜 Not started                               | ongoing       |
+|     | **Total**                       | **326** | **150** | **46%**                                      | **~19 weeks** |
 
 _Task counts are the real checkbox count per phase, verified against the document. The original table under-counted by 25; the estimates are unchanged, since they were made against the work rather than against the count._
 
@@ -340,83 +340,91 @@ _The pricing engine is the highest-risk pure logic in the system. It is also the
 
 _Milestone M3 — the critical phase. Read `docs/PAYMENTS-AND-CHECKOUT.md` in full before starting. Nothing here is a place to move fast._
 
+> **Status (2026-09-29): 34/34 — built end to end; M3 waits only on Stripe test keys.** The storefront now has the cart page, the four-step checkout and the Payment Element (below). Earlier status, for the API: Every API-side task is done and tested against real Postgres and Redis, with the production Stripe adapter talking to a fake Stripe over `httpx.MockTransport`: the checkout integration tests, the concurrency suite at N = 2, 10 and 100, and unit tests for the state machine (all 64 transition pairs), both provider adapters, and PCI scope. **Open:** the storefront's Stripe Payment Element (the storefront has no cart or checkout pages until Phase 10), and the DoD's "a test card completes a full purchase", which needs that page and real Stripe test keys (`VELO_STRIPE_*` are empty in `.env`).
+
 ### 8.1 Checkout session
 
-- [ ] `checkout_sessions` state machine: `initiated → address_set → shipping_set → payment_pending → confirmed` / `failed` / `expired` / `abandoned`
-- [ ] Every transition validated server-side; illegal transitions rejected, not tolerated
-- [ ] `POST /checkout` — create a session from a cart, snapshotting the priced cart into the session
-- [ ] `PATCH /checkout/{id}/address` — set shipping and billing addresses, with validation and normalisation
-- [ ] `PATCH /checkout/{id}/shipping` — select a shipping method from the calculated available rates
-- [ ] Session TTL (30 minutes) with automatic expiry and reservation release
+- [x] `checkout_sessions` state machine: `initiated → address_set → shipping_set → payment_pending → confirmed` / `failed` / `expired` / `abandoned` — _`domains/checkout/state.py`; three edges added so that a payment arriving late still becomes an order (PAYMENTS-AND-CHECKOUT.md §2)_
+- [x] Every transition validated server-side; illegal transitions rejected, not tolerated — _409 `checkout-state`; all 64 pairs tested_
+- [x] `POST /checkout` — create a session from a cart, snapshotting the priced cart into the session — _`checkout_sessions.snapshot` (migration `0012`); ownership by an HMAC-derived httpOnly cookie or the signed-in owner; anyone else gets 404_
+- [x] `PATCH /checkout/{id}/address` — set shipping and billing addresses, with validation and normalisation — _unshippable → 422 `address-unserviceable`_
+- [x] `PATCH /checkout/{id}/shipping` — select a shipping method from the calculated available rates — _plus `GET /shipping-rates` and `POST /abandon`_
+- [x] Session TTL (30 minutes) with automatic expiry and reservation release — _worker sweep every minute, and on touch; 410 `checkout-expired`_
 
 ### 8.2 Inventory reservation — the oversell guard
 
-- [ ] Reserve stock inside the checkout-creation transaction, using `SELECT ... FOR UPDATE` on the inventory row
-- [ ] Reservations carry a TTL tied to the checkout session
-- [ ] Background sweeper releases expired reservations and returns the stock
-- [ ] Reservation converts to a permanent inventory movement on payment confirmation
-- [ ] **Dedicated concurrency test suite**: N simultaneous checkouts against 1 unit of stock must produce exactly 1 order and N-1 clean "out of stock" responses. Run it at N = 2, 10, and 100.
+- [x] Reserve stock inside the checkout-creation transaction, using `SELECT ... FOR UPDATE` on the inventory row — _rows locked in variant order, so checkouts sharing SKUs cannot deadlock_
+- [x] Reservations carry a TTL tied to the checkout session — _extended when payment starts, so 3-D Secure has time_
+- [x] Background sweeper releases expired reservations and returns the stock — _checkouts waiting on a payment are left to reconciliation_
+- [x] Reservation converts to a permanent inventory movement on payment confirmation — _a `sale` movement in the order's transaction; a payment that outlived its reservation takes free stock and flags any shortfall, never refuses_
+- [x] **Dedicated concurrency test suite**: N simultaneous checkouts against 1 unit of stock must produce exactly 1 order and N-1 clean "out of stock" responses. Run it at N = 2, 10, and 100. — _`test_checkout_concurrency.py`; N=100 in 10 s. Also: 8 payments racing for a single-use code, exactly 1 gets it_
 
 ### 8.3 Payment abstraction
 
-- [ ] Define the `PaymentProvider` protocol: `create_intent`, `capture`, `refund`, `verify_webhook`, `get_status`
-- [ ] Implement the Stripe adapter
-- [ ] Implement the Paystack/Flutterwave adapter against the same protocol
-- [ ] Provider selection by currency, region, or configuration
+- [x] Define the `PaymentProvider` protocol: `create_intent`, `capture`, `refund`, `verify_webhook`, `get_status` — _as `get_intent`, plus `cancel` and `parse_event`; statuses, money and events normalised_
+- [x] Implement the Stripe adapter — _REST over httpx, pinned API version, idempotency keys, 5-minute signature tolerance. Tested against a fake Stripe, not yet against Stripe itself_
+- [x] Implement the Paystack/Flutterwave adapter against the same protocol — _Paystack, unit-tested against fake HTTP. Flutterwave not implemented_
+- [x] Provider selection by currency, region, or configuration — _by currency (`VELO_PAYMENT_CURRENCY_PROVIDERS`), else the default; an unconfigured provider → 503_
 
 ### 8.4 Payment flow
 
-- [ ] `POST /checkout/{id}/payment-intent` — **recompute the total from the database**, then create the provider intent for that amount. The amount sent to the provider is never taken from the request body.
-- [ ] Idempotency middleware: `Idempotency-Key` header required on all money-moving POSTs; the `idempotency_keys` table stores request fingerprint and response, and replays return the stored response
-- [ ] Store the payment record in `payment_pending` before calling the provider, so a crash mid-call is recoverable
-- [ ] Frontend integration with Stripe Payment Elements — cards, Apple Pay, Google Pay, Link
-- [ ] 3-D Secure / SCA handled entirely inside the provider's element; confirm no card data ever reaches our origin
+- [x] `POST /checkout/{id}/payment-intent` — **recompute the total from the database**, then create the provider intent for that amount. The amount sent to the provider is never taken from the request body. — _re-priced under the discount locks; a changed total is 409 `price-changed`, a code that ran out is 422 `discount-expired`, and nothing is charged_
+- [x] Idempotency middleware: `Idempotency-Key` header required on all money-moving POSTs; the `idempotency_keys` table stores request fingerprint and response, and replays return the stored response — _a per-route wrapper (`api/idempotency.py`) rather than ASGI middleware; on `POST /checkout` and `/payment-intent` now, refunds in Phase 9_
+- [x] Store the payment record in `payment_pending` before calling the provider, so a crash mid-call is recoverable — _`payments.provider_intent_id` is nullable (migration `0012`); the payment id is the provider's idempotency key_
+- [x] Frontend integration with Stripe Payment Elements — cards, Apple Pay, Google Pay, Link — _`components/checkout/payment-step.tsx`: the Express Checkout Element first (wallets, Link), then the Payment Element; the Pay button carries the server's amount. Paystack's inline popup for NGN/GHS/ZAR/KES. The cart page, the four-step checkout (contact, delivery, shipping, payment; resumable per tab) and the polling confirmation page came with it, pulling Phase 10.4 forward_
+- [x] 3-D Secure / SCA handled entirely inside the provider's element; confirm no card data ever reaches our origin — _`stripe.confirmPayment` runs 3-D Secure in Stripe's frame, and a bank redirect returns to `/checkout/confirmation`, which reads `redirect_status` and polls; there is no card input on our origin. `test_pci_scope.py` fails on any API field that could hold card data_
 
 ### 8.5 Webhooks — where orders actually get created
 
-- [ ] `POST /webhooks/stripe` — **verify the HMAC signature against the raw request body before parsing anything**
-- [ ] Persist every webhook to `payment_events` keyed by the provider's event ID; a duplicate event ID is acknowledged and dropped
-- [ ] Return `200` immediately, process asynchronously — providers retry aggressively on slow responses
-- [ ] Handle `payment_intent.succeeded` → convert reservation to a sale, create the order, send confirmation
-- [ ] Handle `payment_intent.payment_failed` → release the reservation, notify the customer, keep the cart intact
-- [ ] Handle `charge.refunded`, `charge.dispute.created`
-- [ ] Out-of-order event handling: a `succeeded` event arriving after a `failed` event for the same intent must resolve correctly
-- [ ] Dead-letter queue for webhooks that fail processing, with alerting and a manual replay tool
-- [ ] **Reconciliation job** — every 15 minutes, query the provider for intents in a non-terminal state older than 30 minutes and settle them. This is the safety net for lost webhooks.
+- [x] `POST /webhooks/stripe` — **verify the HMAC signature against the raw request body before parsing anything** — _and `/webhooks/paystack` (HMAC-SHA512)_
+- [x] Persist every webhook to `payment_events` keyed by the provider's event ID; a duplicate event ID is acknowledged and dropped
+- [x] Return `200` immediately, process asynchronously — providers retry aggressively on slow responses — _the `process_payment_event` job; a retry every minute catches anything the queue lost_
+- [x] Handle `payment_intent.succeeded` → convert reservation to a sale, create the order, send confirmation — _confirmation email through the outbox relay_
+- [x] Handle `payment_intent.payment_failed` → release the reservation, notify the customer, keep the cart intact — _**deliberately keeps** the reservation until the TTL instead: Stripe retries a declined card on the same intent (PAYMENTS-AND-CHECKOUT.md §2)_
+- [x] Handle `charge.refunded`, `charge.dispute.created` — _and `charge.dispute.closed`, `payment_intent.canceled`, `.processing`, `.requires_action`_
+- [x] Out-of-order event handling: a `succeeded` event arriving after a `failed` event for the same intent must resolve correctly — _both orders tested; the payment row is locked, so two events for one intent serialise_
+- [x] Dead-letter queue for webhooks that fail processing, with alerting and a manual replay tool — _five attempts with backoff, then `dead_lettered_at` and an ops alert; `python -m velo.scripts.payment_events`_
+- [x] **Reconciliation job** — every 15 minutes, query the provider for intents in a non-terminal state older than 30 minutes and settle them. This is the safety net for lost webhooks. — _also cancels intents nobody finished, and declined intents on ended checkouts_
 
 ### 8.6 Order creation
 
-- [ ] Create the order **atomically** in the webhook handler: order + line items + inventory movement + payment record, in one transaction
-- [ ] Snapshot into every line item: product title, variant title, SKU, unit price, tax rate, discount applied. A later catalog edit must never alter a historical order.
-- [ ] Generate a human-readable order number (not the UUID, not a sequential integer that leaks volume)
-- [ ] Emit the `order.created` event via the outbox for email and analytics
-- [ ] Clear the cart only after the order is committed
+- [x] Create the order **atomically** in the webhook handler: order + line items + inventory movement + payment record, in one transaction — _when the worker processes the webhook (`domains/checkout/settlement.py`), with discount redemptions and the outbox event_
+- [x] Snapshot into every line item: product title, variant title, SKU, unit price, tax rate, discount applied. A later catalog edit must never alter a historical order. — _tested by editing the catalog after purchase_
+- [x] Generate a human-readable order number (not the UUID, not a sequential integer that leaks volume) — _`VLO-` and 6 characters from a 30-letter alphabet with no look-alikes_
+- [x] Emit the `order.created` event via the outbox for email and analytics
+- [x] Clear the cart only after the order is committed — _in the same transaction, so both happen or neither; lines added since checkout began stay_
 
 **Definition of Done — Phase 8 (M3):** A test card completes a full purchase end to end. The concurrency suite passes at N=100. Replaying a webhook creates no second order. Killing the API between intent creation and webhook delivery still results in a correct order once reconciliation runs. **Every one of these is tested, not assumed.**
+
+> **Against the DoD:** concurrency at N=100 ✅. Webhook replay → one order ✅. Paid with no webhook delivered → reconciliation creates the order ✅, and a crash between writing the payment and storing its intent is recovered ✅. The storefront payment page ✅. **A real test card end to end: not yet run** — `VELO_STRIPE_SECRET_KEY`, `VELO_STRIPE_PUBLISHABLE_KEY` and `VELO_STRIPE_WEBHOOK_SECRET` are empty in `.env`. With test keys set and `stripe listen --forward-to localhost:8000/api/v1/webhooks/stripe` running, pay with `4242 4242 4242 4242` (and `4000 0027 6000 3184` for 3-D Secure).
 
 ---
 
 # Phase 9 — Orders, Fulfilment & Returns
 
-- [ ] Order status machine: `pending → paid → processing → partially_fulfilled → fulfilled → delivered`, plus `cancelled` and `refunded`
-- [ ] `order_events` as an immutable audit trail — every status change records actor, timestamp, and reason
-- [ ] Customer order endpoints: list, detail, track, cancel (only while cancellable)
-- [ ] Admin order endpoints: list with filters, detail, transition status, add internal notes
-- [ ] Fulfilment: create a fulfilment against selected line items, attach carrier and tracking number, support partial fulfilment
-- [ ] Shipment tracking integration (carrier API or webhook), with customer-facing status
-- [ ] Cancellation: allowed pre-fulfilment; restores inventory, triggers a full refund
-- [ ] Refunds:
-  - [ ] Full and partial, at line-item granularity
-  - [ ] Validated against the captured amount — cumulative refunds can never exceed it
-  - [ ] Idempotent, via the same key mechanism as payments
-  - [ ] Recorded in the refund ledger with a reason code
-- [ ] Returns / RMA: customer request → admin approval → return label → receipt at warehouse → refund
-- [ ] Restocking decision on return receipt (restock vs write off as damaged)
-- [ ] Invoice PDF generation and email delivery
-- [ ] Packing slip generation for fulfilment staff
-- [ ] Order search by number, customer email, or SKU
+> **Status (2026-09-29): 13/13 — done.** Built in `domains/orders/` (state, lifecycle, fulfilment, refunds, returns, documents, queries) and served by `api/v1/orders.py`, `api/v1/admin_orders.py` and `POST /webhooks/tracking`; migration `0013`. `tests/integration/test_orders.py` runs the DoD against real Postgres and Redis with the production Stripe adapter talking to the fake Stripe; `tests/unit/test_order_rules.py` covers both state machines and the refund arithmetic, with a Hypothesis property that any split of a line refunds exactly its total.
+
+- [x] Order status machine: `pending → paid → processing → partially_fulfilled → fulfilled → delivered`, plus `cancelled` and `refunded` — _`domains/orders/state.py`, with `payment_status` and `fulfilment_status` kept separately (the money and the goods move independently of the order's life); anything else is 409 `order-state`_
+- [x] `order_events` as an immutable audit trail — every status change records actor, timestamp, and reason — _insert-only, written in the same transaction as every change; staff mutations also go to `audit_log`. The DoD test asserts the whole trail in order_
+- [x] Customer order endpoints: list, detail, track, cancel (only while cancellable) — _plus guest access by a signed link (an HMAC of the order id; nothing stored) and `POST /orders/lookup` by number and email, 10 an hour per IP_
+- [x] Admin order endpoints: list with filters, detail, transition status, add internal notes
+- [x] Fulfilment: create a fulfilment against selected line items, attach carrier and tracking number, support partial fulfilment — _tracking links built for UPS, USPS, FedEx, DHL, Royal Mail, DPD and GIG; nothing ships while a chargeback is open_
+- [x] Shipment tracking integration (carrier API or webhook), with customer-facing status — _`POST /webhooks/tracking`, HMAC-SHA256 signed; the order is delivered when every parcel is_
+- [x] Cancellation: allowed pre-fulfilment; restores inventory, triggers a full refund — _restores exactly what the ledger says the order took, which can be less than it bought_
+- [x] Refunds:
+  - [x] Full and partial, at line-item granularity — _`refund_items`; units priced as their cumulative share of the line, so parts always sum to the line total; shipping and goodwill on top_
+  - [x] Validated against the captured amount — cumulative refunds can never exceed it — _pending refunds count too, under the payment row's lock; four simultaneous refunds, one succeeds_
+  - [x] Idempotent, via the same key mechanism as payments — _and the refund's own id is the provider's idempotency key; unsubmitted refunds are resubmitted every 5 minutes (Paystack's, which cannot be deduplicated, are escalated instead)_
+  - [x] Recorded in the refund ledger with a reason code
+- [x] Returns / RMA: customer request → admin approval → return label → receipt at warehouse → refund
+- [x] Restocking decision on return receipt (restock vs write off as damaged)
+- [x] Invoice PDF generation and email delivery — _`fpdf2`, from the order's snapshots; attached to the confirmation email and downloadable by customer and admin_
+- [x] Packing slip generation for fulfilment staff — _per order, or per parcel_
+- [x] Order search by number, customer email, or SKU
 
 **Definition of Done — Phase 9:** An operator can take an order from paid to delivered, process a partial return, and issue a partial refund — entirely through the API, never touching the database. Every transition is in the audit trail.
+
+> **Against the DoD:** ✅ `test_an_operator_takes_an_order_from_paid_to_delivered`, `test_a_partial_return_and_its_partial_refund`, `test_a_partial_refund_at_line_level_is_idempotent` — all through the API, with the audit trail asserted.
 
 ---
 
@@ -426,55 +434,57 @@ _Milestone M4 begins. This is where the design from Phase 2 becomes real._
 
 ### 10.1 Shell
 
-- [ ] Root layout: header with search and cart, mega-nav, footer, mobile nav drawer
-- [ ] Theme toggle with no flash of incorrect theme on first paint
-- [ ] Global loading, error, and 404 boundaries
-- [ ] Toast system for feedback on every mutation
-- [ ] Skip-to-content link and a visible, high-contrast focus ring throughout
+- [x] Root layout: header with search and cart, mega-nav, footer, mobile nav drawer — _`components/site-header.tsx`, `components/shell/`; Radix NavigationMenu for the mega-nav, a left drawer on phones, the cart drawer on the right_
+- [x] Theme toggle with no flash of incorrect theme on first paint — _from Phase 3: `ThemeScript` sets the theme before first paint; three states, not two_
+- [x] Global loading, error, and 404 boundaries — _`app/loading.tsx` (shaped skeletons), `error.tsx` (retry, the digest for support), `global-error.tsx`, `not-found.tsx`_
+- [x] Toast system for feedback on every mutation — _`notify` (Phase 5), now used by cart, wishlist, returns, cancellation — never for payment outcomes, which are page states_
+- [x] Skip-to-content link and a visible, high-contrast focus ring throughout — _skip link lands on a focusable `<main>`; every control keeps the 3 px ring_
 
 ### 10.2 Discovery
 
-- [ ] Home page: hero, featured collections, new arrivals, editorial blocks — server-rendered
-- [ ] Collection and category listing: filter sidebar (desktop) / filter sheet (mobile), sort control, responsive grid
-- [ ] Filters reflected in the URL so results are shareable and back/forward behave correctly
-- [ ] Infinite scroll or "load more" with a working, accessible fallback
-- [ ] Search overlay with debounced instant results, keyboard navigation, and recent searches
-- [ ] Product card: image with hover state, title, price with compare-at, rating, quick-add, wishlist toggle
+- [x] Home page: hero, featured collections, new arrivals, editorial blocks — server-rendered — _revalidated every minute; each section drops out rather than erroring when the catalog cannot be read_
+- [x] Collection and category listing: filter sidebar (desktop) / filter sheet (mobile), sort control, responsive grid — _one `Listing` for all products, categories and collections; brand options from the search facets_
+- [x] Filters reflected in the URL so results are shareable and back/forward behave correctly — _`lib/listing.ts`: prices in whole units in the URL, minor units to the API_
+- [x] Infinite scroll or "load more" with a working, accessible fallback — _"Load more" is a real link to the next cursor; with JavaScript it appends, announces the count, and focuses the first new product_
+- [x] Search overlay with debounced instant results, keyboard navigation, and recent searches — _a combobox: 200 ms debounce, arrows and Enter, `/` opens it from anywhere; full results at `/search` with facet links_
+- [x] Product card: image with hover state, title, price with compare-at, rating, quick-add, wishlist toggle — _quick-add adds directly only when there is one variant; otherwise it opens the product rather than guess a size_
 
 ### 10.3 Product detail
 
-- [ ] Image gallery: thumbnails, zoom, swipeable on mobile, lazy-loaded below the fold
-- [ ] Variant selector reflecting real availability — unavailable combinations are visibly disabled, not silently broken
-- [ ] Live stock indicator ("Only 3 left")
-- [ ] Add to cart with optimistic UI and rollback on failure
-- [ ] Description, specifications, shipping and returns info in accessible accordions
-- [ ] Reviews with distribution summary, pagination, and a submission form
-- [ ] Related and recently viewed products
-- [ ] Full structured data (`Product`, `Offer`, `AggregateRating`) for rich search results
+- [x] Image gallery: thumbnails, zoom, swipeable on mobile, lazy-loaded below the fold — _scroll-snap strip with dots on phones, thumbnails on desktop, a full-size dialog; follows the chosen variant's image_
+- [x] Variant selector reflecting real availability — unavailable combinations are visibly disabled, not silently broken — _struck through, `aria-disabled`, labelled "— out of stock"; colour swatches carry their name_
+- [x] Live stock indicator ("Only 3 left")
+- [x] Add to cart with optimistic UI and rollback on failure — _confirms at once and opens the drawer; a refusal rolls back with the reason. Sticky add-to-cart bar on phones; back-in-stock sign-up when sold out_
+- [x] Description, specifications, shipping and returns info in accessible accordions — _native `details`/`summary`_
+- [x] Reviews with distribution summary, pagination, and a submission form — _new `GET /products/{slug}/reviews/summary` for the bars_
+- [x] Related and recently viewed products — _recently viewed kept in this browser only_
+- [x] Full structured data (`Product`, `Offer`, `AggregateRating`) for rich search results — _`AggregateOffer` across variants; `<` escaped in the JSON-LD_
 
 ### 10.4 Cart & checkout
 
-- [ ] Cart drawer (quick view) and a full cart page
-- [ ] Quantity stepper with optimistic update, stock cap, and debounced server sync
-- [ ] Discount code entry with clear success and failure messaging
-- [ ] Order summary that updates live and shows exactly how the total was reached
-- [ ] Checkout: a four-step flow with a persistent progress indicator, resumable if the customer navigates away
-- [ ] Address form with autocomplete, per-country field layouts, and inline validation
-- [ ] Shipping method selection with prices and delivery estimates
-- [ ] Payment step with Stripe Payment Elements, express wallet buttons surfaced first
-- [ ] Review step showing the final, authoritative total before the customer commits
-- [ ] Order confirmation page with full order detail and next steps
-- [ ] **Checkout error handling** — card declined, network failure, session expired, stock lost during checkout. Every one has a designed, recoverable state. Never a blank screen, never a raw error.
+- [x] Cart drawer (quick view) and a full cart page
+- [x] Quantity stepper with optimistic update, stock cap, and debounced server sync — _300 ms debounce, capped at `max_quantity`, the server's value restored on refusal_
+- [x] Discount code entry with clear success and failure messaging
+- [x] Order summary that updates live and shows exactly how the total was reached — _"Calculated at checkout", never $0.00, until there is an address_
+- [x] Checkout: a four-step flow with a persistent progress indicator, resumable if the customer navigates away — _the session id is kept per tab; the step shown is derived from the server's state_
+- [x] Address form with autocomplete, per-country field layouts, and inline validation — _`autocomplete` tokens sectioned for shipping and billing, per-country labels and postcode formats, saved addresses as cards. No address-lookup service is wired in — browser autofill does the work_
+- [x] Shipping method selection with prices and delivery estimates — _with Phase 8_
+- [x] Payment step with Stripe Payment Elements, express wallet buttons surfaced first — _with Phase 8_
+- [x] Review step showing the final, authoritative total before the customer commits — _on the payment step, with the server's amount — the same as on the Pay button_
+- [x] Order confirmation page with full order detail and next steps — _with Phase 8: polls on the PAGE-SPECS §1.4 schedule and never asks for a second payment_
+- [x] **Checkout error handling** — card declined, network failure, session expired, stock lost during checkout. Every one has a designed, recoverable state. Never a blank screen, never a raw error. — _declined (Stripe's message, retry on the same intent), network (plain-words alert, the idempotency key kept for the retry), expired (restart, cart kept), stock lost (the short lines named, back to the cart), price changed (re-priced summary, pay again), payments down (items still held). Exercised against the API; the browser pass is in the DoD note below_
 
 ### 10.5 Account
 
-- [ ] Order history and order detail with tracking
-- [ ] Address book management
-- [ ] Profile and password settings
-- [ ] Wishlist
-- [ ] Return request flow
+- [x] Order history and order detail with tracking — _per-parcel tracking, a timeline, invoice PDF, cancel, "Buy again"; guests by signed link or `/orders/lookup`_
+- [x] Address book management — _Phase 5_
+- [x] Profile and password settings — _Phase 5_
+- [x] Wishlist — _`wishlist_items` (migration `0014`), `/account/wishlist`; hearts on every card_
+- [x] Return request flow — _lines, quantities and a reason from the order page; the RMA, the label to print, and the refund timeframe; `/account/returns` follows them all_
 
 **Definition of Done — Phase 10:** Every page works at 320px and at 2560px, in both themes, with a keyboard alone, and with a screen reader. Every error path from 10.4 has been manually exercised.
+
+> **Against the DoD (2026-09-29):** every page is built, type-checked, linted and in the production build; each server-renders `200` against the dev API with the seeded catalog, an unknown path is `404`, and the checkout's calls were walked end to end over HTTP down to the designed "payments unavailable" state. **Not yet done: the manual pass** — 320 px and 2560 px, both themes, keyboard alone, and a screen reader, in a real browser. That is a person's job with the page in front of them, and it is what stands between 35/35 tasks and this phase being closed.
 
 ---
 
@@ -711,3 +721,5 @@ Recorded so they are decisions rather than omissions.
 | 2026-09-28 | **Phase 5 closed** (15/16; optional OAuth open). Browser pass on the storefront, driving headless Edge: create account → emailed verification link → profile edit → add address → sessions → sign out → signed-out redirect → wrong password → forgot password → emailed reset link → sign in with the new password, all green, and the lockout cooldown message checked by hitting the per-IP limit for real. Found and fixed: the header overflowed a 375 px viewport by 8 px once signed in (the account link is now icon-only on phones, name kept for screen readers), and no favicon (a 404 on every page; `app/icon.svg` added). A hydration warning on the Radix checkbox appeared once on a cold dev compile; the server HTML matches the client, and it did not recur.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Claude |
 | 2026-09-28 | **Phase 6 closed** (19/19, M2). Catalog, inventory and search domains; public, search and admin routers; the ARQ worker (`velo/worker.py`) relaying the outbox; `pnpm worker`, `search:reindex`, `search:check`, `storage:init`; `seed --products N`. Migration `0010`: back-in-stock subscriptions, `product_media.renditions`, and `idx_variant_option_values_value` — a missing reverse index found by `EXPLAIN` (a colour filter scanned the primary key 420 times). DoD measured on 1,000 products / 11,701 variants with API and client in Linux containers: search p50 12 ms, p95 15 ms (Meilisearch 1 ms); p95 41 ms at 4 concurrent per worker — beyond that one worker queues, so capacity is workers, not latency. Meilisearch stopped: p95 62 ms, all `degraded`, no errors. Found and fixed on the way: `httpx` POSTs to Meilisearch stalled ~45 ms behind Docker's relay (searches are now GET), Meilisearch's small replies stalled ~7% of keep-alive searches by ~40 ms on Linux (searches use a fresh connection), `localhost` costs ~45 ms per HTTP call on Docker Desktop for Windows (dev URLs are now `127.0.0.1`), the Postgres fallback took 49 s for a filtered facet count (now resolves ids once: 40–70 ms), the relay published events before Meilisearch applied them, a category move crashed on `subpath` of the node itself, reviews 500'd because the API never loaded the orders mapper, and admin routes read a closure-local dependency FastAPI cannot resolve under postponed annotations. MinIO's images are gone from Docker Hub; SeaweedFS replaces it locally. 100 new tests (441 total), all against real Postgres, Redis, Meilisearch and S3. | Claude |
 | 2026-09-29 | **Phase 7 closed.** Pure pricing engine (`velo/domains/cart/pricing.py`): subtotal, product discounts by an explicit stacking policy, shipping bands, exclusive and inclusive tax, one rounding point (half up, per discount and per tax rate) and largest-remainder allocation — rules written up in `docs/PRICING.md`. Discount eligibility by customer and calendar (`discounts/service.py`), rules-based `TaxProvider` and shipping zones (`shipping/service.py`), and the cart service and API: guest carts behind a hashed cookie token, merge at sign-in and registration, warnings instead of silent changes, 60/min cart and 20/h code-guessing limits, and a worker sweep for abandoned and expired carts. Migration `0011`: buy-X-get-Y quantities, customer segments and check constraints on discounts; the applied code on carts; the last-shown price on cart lines (for warnings, never charged). Engine at 100% branch coverage with 46 example tests and 7 Hypothesis properties; 38 cart integration tests; 13 eligibility unit tests. Found and fixed: coverage under-reported every async service by ~40 points because SQLAlchemy's greenlets hid code from the tracer — `concurrency = ["greenlet", "thread"]` in `pyproject.toml`; the whole API measures 91%. Live check on the dev data: automatic 15%-over-$150 applied without a code, CA tax 7.25% on the discounted amount, WELCOME10 accepted but outclassed, an expired code refused with its reason, UK VAT extracted not added.                                                                                                                                                                       | Claude |
+| 2026-09-29 | **Phase 8 built (34/34) and Phase 9 closed (13/13).** Storefront: cart page, four-step checkout (resumable per tab), Stripe Express Checkout and Payment Elements, Paystack inline, and the polling confirmation page; a minimal product list and page to buy from (Phase 10 finishes them). API: order, return and shipment state machines; cancellation that restocks exactly what the ledger took; refunds by line, shipping and goodwill, priced from the snapshot, bounded by the capture with pending refunds counted, idempotent, submitted after commit and reconciled every 5 minutes (Paystack escalated, not retried blind); fulfilment with tracking links and a signed carrier webhook; returns with a restock decision at receipt; invoice, packing slip and return label PDFs; order search by number, email or SKU. Found on the way: webhook-recorded refunds would have looked unsubmitted to the retry job and been sent again — now marked submitted. Migration `0013`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Claude |
+| 2026-09-29 | **Phase 10 built (35/35); the manual viewport and accessibility pass is what remains.** Shell, discovery (home, listings with URL-held filters and a no-JS "Load more", search overlay and results page), product page (gallery, availability-aware variants, optimistic add to cart, sticky mobile bar, back-in-stock, reviews with distribution, related, recently viewed, JSON-LD), cart drawer, a review step before paying, and the account area (orders with per-parcel tracking and timeline, cancel, returns with labels, wishlist, guest access by signed link or lookup). API additions: the wishlist (migration `0014`) and `GET /products/{slug}/reviews/summary`. All pages server-render against the dev API; the checkout's calls were walked end to end over HTTP.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Claude |

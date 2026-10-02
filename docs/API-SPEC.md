@@ -331,16 +331,33 @@ Session ownership is proven by an httpOnly cookie set at creation, so a session 
 
 The `amount` returned is the server's authoritative figure, recomputed from the database microseconds before the provider call. It is included so the UI can display it — not so the client can confirm it.
 
+**Request bodies.** `POST /checkout` takes `{"email"}` from a guest; a signed-in customer's account email is used. `PATCH /address` takes `{"shipping_address", "billing_address"?}` — billing defaults to shipping, and country, region code and postcode are normalised to upper case. `PATCH /shipping` takes `{"shipping_rate_id"}`. No body carries a price, and every one rejects unknown fields.
+
+**The session cookie.** `velo_checkout` (HttpOnly, `Path=/api/v1`) holds an HMAC of the session id under the server's secret. Nothing is stored, so a replayed `POST /checkout` sets the same cookie again. One browser holds one checkout at a time; starting a new checkout of the same cart retires the previous one and returns its stock.
+
+**Totals.** `shipping` and `tax` are `null` until an address is set. After the address step the first rate that fits is preselected, and the customer confirms or changes it with `PATCH /shipping`. `order_number` appears once the webhook has created the order — the confirmation page polls `GET /checkout/{id}` until it does.
+
+**Errors:** `404` for a checkout the caller does not own; `409 checkout-state` for a step out of order (paying before choosing shipping, editing while a payment is in flight); `409 out-of-stock` at creation, with one field error per short variant (`items.<variant_id>`); `410 checkout-expired` after the 30-minute TTL — the cart is kept; `422 cart-empty`; `422 address-unserviceable`; `422 shipping-rate-unavailable`; at payment, `409 price-changed` or `422 discount-expired` when the recomputed total differs from the last one shown — the checkout is already re-priced, so the client re-reads it and asks again; `503 payments-unavailable` when the provider is down or unconfigured — the reservation is kept. Idempotency: `400 idempotency-key-required`, `422 idempotency-key-reused`, `409 request-in-progress` (with `Retry-After`).
+
 ### Orders — `/orders`
 
-| Method | Path                       | Auth                  | Description                          |
-| ------ | -------------------------- | --------------------- | ------------------------------------ |
-| GET    | `/orders`                  | access                | The caller's orders                  |
-| GET    | `/orders/{number}`         | access or guest token | Order detail                         |
-| POST   | `/orders/{number}/cancel`  | access                | Cancel while cancellable             |
-| GET    | `/orders/{number}/invoice` | access                | Invoice PDF                          |
-| POST   | `/orders/{number}/returns` | access                | Request a return                     |
-| GET    | `/orders/lookup`           | —                     | Guest lookup by order number + email |
+| Method | Path                                   | Auth                  | Description                          |
+| ------ | -------------------------------------- | --------------------- | ------------------------------------ |
+| GET    | `/orders`                              | access                | The caller's orders, newest first    |
+| POST   | `/orders/lookup`                       | —                     | Guest lookup by order number + email |
+| GET    | `/orders/{number}`                     | access or guest token | Order detail, with shipments         |
+| POST   | `/orders/{number}/cancel`              | access or guest token | Cancel while cancellable             |
+| GET    | `/orders/{number}/invoice`             | access or guest token | Invoice PDF                          |
+| POST   | `/orders/{number}/returns`             | access or guest token | Request a return                     |
+| GET    | `/orders/{number}/returns/{rma}/label` | access or guest token | Return label PDF, once approved      |
+
+**Guest access.** The guest token is `?token=` on the URL: an HMAC of the order id under the server secret, so nothing is stored and rotating the secret revokes every link. It arrives in the confirmation email's link and in `access_token` on every order response. `POST /orders/lookup` takes `{"number", "email"}` in the body — never in a query string, where it would sit in access logs — and is limited to 10 an hour per IP. A number that does not match its email is `404`, the same as a number that does not exist.
+
+**The order view** carries `status`, `payment_status` and `fulfilment_status` separately (the order's life, the money, the goods), every line with `quantity_fulfilled`, `quantity_returned`, `quantity_refunded` and `returnable_quantity`, the `shipments` with carrier tracking links, `returns`, `refunds`, the card brand and last four, and `can_cancel` / `can_return`. Money is minor units, as everywhere.
+
+**Cancellation** is allowed until anything ships — a customer while the order is `paid`, staff also while it is `processing`. It returns exactly the stock the order took and refunds everything not yet refunded. After shipping: `409 not-cancellable`; the customer returns the goods instead.
+
+**Returns.** `{"items": [{"order_item_id", "quantity"}], "reason", "note"?}` with a reason of `changed_mind`, `wrong_size`, `not_as_described`, `damaged`, `defective`, `wrong_item` or `other`. Only shipped units can be returned, within `VELO_RETURN_WINDOW_DAYS` (30) of the last parcel's delivery; each line can return what shipped, less what came back, less what other open returns claim. Errors: `409 return-not-allowed` (nothing shipped, or the window closed), `422 quantity-exceeded`.
 
 ### Account — `/account`
 
@@ -377,6 +394,29 @@ All require an `admin`, `staff`, or `owner` role. Every mutation writes to `audi
 | Staff     | `GET /admin/staff`, `POST /admin/staff/invite`, `PATCH/DELETE /admin/staff/{id}`                                                                                        |
 | Audit     | `GET /admin/audit-log`                                                                                                                                                  |
 
+**Orders (Phase 9).** As built:
+
+| Method | Path                                    | Permission      | Description                                                                                                                            |
+| ------ | --------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/admin/orders`                         | `orders:read`   | `status`, `payment_status`, `fulfilment_status`, `placed_from/to`; `q` matches an order number, a customer email, or a SKU on any line |
+| GET    | `/admin/orders/{id}`                    | `orders:read`   | Detail, with the `events` audit trail, refunds, and `refundable`                                                                       |
+| POST   | `/admin/orders/{id}/status`             | `orders:fulfil` | `processing` or `delivered` by hand; the rest follow from actions                                                                      |
+| PATCH  | `/admin/orders/{id}/notes`              | `orders:fulfil` | `{"internal_note"}`                                                                                                                    |
+| POST   | `/admin/orders/{id}/fulfilments`        | `orders:fulfil` | Ship `lines` (omit: everything left), `carrier`, `tracking_number`                                                                     |
+| PATCH  | `/admin/fulfilments/{id}`               | `orders:fulfil` | Parcel `status` (`in_transit`, `delivered`, `failed`, `cancelled`), tracking                                                           |
+| POST   | `/admin/orders/{id}/cancel`             | `orders:refund` | Cancel before shipping: restock, refund in full                                                                                        |
+| POST   | `/admin/orders/{id}/refunds`            | `orders:refund` | **Idempotency-Key required.** Lines, shipping, goodwill                                                                                |
+| GET    | `/admin/orders/{id}/invoice`            | `orders:read`   | Invoice PDF                                                                                                                            |
+| GET    | `/admin/orders/{id}/packing-slip`       | `orders:read`   | Packing slip PDF; `?fulfilment_id=` for one parcel                                                                                     |
+| GET    | `/admin/returns`, `/admin/returns/{id}` | `orders:read`   | The returns queue, filterable by `status`                                                                                              |
+| PATCH  | `/admin/returns/{id}`                   | `orders:fulfil` | `action`: `approve`, `reject`, `mark_in_transit`, `receive`, `refund` (needs `orders:refund`), `close`                                 |
+
+**Refund requests name lines, never amounts for them:** `{"lines": [{"order_item_id", "quantity", "restock"?}], "include_shipping"?, "extra_amount"?, "reason", "note"?}`. Each unit is priced from the order's snapshot as its cumulative share of the line total, so a line refunded in parts sums to exactly its total. `extra_amount` is a goodwill amount on top. `restock: true` is for units that have not shipped: their stock goes back and they come off the order. Errors: `422 refund-exceeds-capture` (cumulative refunds, pending ones included, would pass what was captured), `422 quantity-exceeded`, `422 nothing-to-refund`. A refund the provider cannot take right now is recorded and returned `pending`; reconciliation submits it within five minutes.
+
+**Receiving a return** needs every line with its `condition` (`new`, `opened`, `damaged`) and a `restock` decision — restocking is never automatic. Restocked units get a `return` movement; written-off units never re-enter stock.
+
+**Carrier tracking** posts to `POST /webhooks/tracking` (below).
+
 `POST /admin/inventory/{variant_id}/adjust` requires a `reason` field. Untraceable stock adjustments are how inventory ledgers stop reconciling. Operators may give `restock` or `return` (must add), `damage` or `theft` (must remove), or `adjustment` (either way, for stocktakes); `sale` and `initial` are written by the system only. An adjustment can never take stock on hand below what checkouts have reserved.
 
 **Permissions.** Catalog reads need `admin:access`; catalog, media, collection, category and review writes need `catalog:write`; stock changes need `inventory:write` — so fulfilment staff can receive stock without editing products.
@@ -387,11 +427,16 @@ All require an `admin`, `staff`, or `owner` role. Every mutation writes to `audi
 
 ### Webhooks — `/webhooks`
 
-| Method | Path                 | Auth                             |
-| ------ | -------------------- | -------------------------------- |
-| POST   | `/webhooks/stripe`   | HMAC signature over the raw body |
-| POST   | `/webhooks/paystack` | HMAC signature over the raw body |
-| POST   | `/webhooks/resend`   | HMAC signature over the raw body |
+| Method | Path                 | Auth                                                |
+| ------ | -------------------- | --------------------------------------------------- |
+| POST   | `/webhooks/stripe`   | HMAC signature over the raw body                    |
+| POST   | `/webhooks/paystack` | HMAC signature over the raw body                    |
+| POST   | `/webhooks/resend`   | HMAC signature over the raw body                    |
+| POST   | `/webhooks/tracking` | `X-Velo-Signature`: hex HMAC-SHA256 of the raw body |
+
+**Tracking** takes `{"tracking_number", "status", "occurred_at"?}` from a carrier or an aggregator, signed with `VELO_TRACKING_WEBHOOK_SECRET` (empty: the endpoint is `404`). `in_transit` and `out_for_delivery` mean in transit; `delivered` delivers the parcel — and the order, once every parcel of a fully shipped order is delivered; `failed` and `exception` flag the order for staff. A status a parcel cannot move to is logged and acknowledged, so the carrier does not retry it forever.
+
+A bad or missing signature is `400 invalid-signature`, and nothing is stored. A verified event is stored under its provider event id and answered `200 {"received": true}` at once; a repeat of the same id gets the same answer and is dropped. The worker applies events afterwards (PAYMENTS-AND-CHECKOUT.md §6). An endpoint whose provider is not configured is `404`. `/webhooks/resend` arrives with email in Phase 12.
 
 ### System
 

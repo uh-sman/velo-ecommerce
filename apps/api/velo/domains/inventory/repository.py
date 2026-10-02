@@ -21,6 +21,7 @@ from velo.domains.inventory.models import (
     BackInStockSubscription,
     InventoryItem,
     InventoryMovement,
+    InventoryReservation,
 )
 
 _variants = table(
@@ -87,6 +88,16 @@ class SubscriptionRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ReservationRecord:
+    id: uuid.UUID
+    variant_id: uuid.UUID
+    checkout_session_id: uuid.UUID
+    quantity: int
+    status: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class VariantLabel:
     variant_id: uuid.UUID
     product_id: uuid.UUID
@@ -131,6 +142,25 @@ class InventoryRepository:
             .execution_options(populate_existing=True)
         )
         return _stock(row) if row else None
+
+    async def lock_many(self, variant_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, StockRecord]:
+        """Several rows, locked in variant order.
+
+        A fixed lock order is what keeps two checkouts that share SKUs from
+        deadlocking: each waits for the other in the same sequence.
+        """
+        if not variant_ids:
+            return {}
+        rows = (
+            await self._session.scalars(
+                select(InventoryItem)
+                .where(InventoryItem.variant_id.in_(variant_ids))
+                .order_by(InventoryItem.variant_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+        return {row.variant_id: _stock(row) for row in rows}
 
     async def create(self, variant_id: uuid.UUID, **fields: Any) -> StockRecord:
         row = InventoryItem(variant_id=variant_id, **fields)
@@ -177,6 +207,20 @@ class InventoryRepository:
             )
         ).all()
         return [self._movement(row) for row in rows[:limit]], len(rows) > limit
+
+    async def reference_totals(
+        self, reference_type: str, reference_id: uuid.UUID
+    ) -> dict[uuid.UUID, int]:
+        """Net movement per variant written against one reference (an order, a return)."""
+        rows = await self._session.execute(
+            select(InventoryMovement.variant_id, func.sum(InventoryMovement.quantity_delta))
+            .where(
+                InventoryMovement.reference_type == reference_type,
+                InventoryMovement.reference_id == reference_id,
+            )
+            .group_by(InventoryMovement.variant_id)
+        )
+        return {variant_id: int(total or 0) for variant_id, total in rows.all()}
 
     async def ledger_total(self, variant_id: uuid.UUID) -> int:
         total = await self._session.scalar(
@@ -286,6 +330,88 @@ class InventoryRepository:
             select(InventoryItem.id).where(InventoryItem.variant_id == variant_id)
         )
         return item_id
+
+    # ── Reservations ──────────────────────────────────────────────────────
+
+    async def add_reservation(
+        self, variant_id: uuid.UUID, session_id: uuid.UUID, quantity: int, expires_at: datetime
+    ) -> None:
+        self._session.add(
+            InventoryReservation(
+                variant_id=variant_id,
+                checkout_session_id=session_id,
+                quantity=quantity,
+                expires_at=expires_at,
+            )
+        )
+        await self._session.flush()
+
+    async def active_reservations(self, session_id: uuid.UUID) -> list[ReservationRecord]:
+        """A checkout's live reservations, locked; the caller locks stock rows first."""
+        rows = (
+            await self._session.scalars(
+                select(InventoryReservation)
+                .where(
+                    InventoryReservation.checkout_session_id == session_id,
+                    InventoryReservation.status == "active",
+                )
+                .order_by(InventoryReservation.variant_id)
+                .with_for_update()
+            )
+        ).all()
+        return [
+            ReservationRecord(
+                id=row.id,
+                variant_id=row.variant_id,
+                checkout_session_id=row.checkout_session_id,
+                quantity=row.quantity,
+                status=row.status,
+                expires_at=row.expires_at,
+            )
+            for row in rows
+        ]
+
+    async def reserved_variants(self, session_id: uuid.UUID) -> list[uuid.UUID]:
+        """The variants a checkout holds, unlocked: to lock their stock rows in order."""
+        rows = await self._session.scalars(
+            select(InventoryReservation.variant_id)
+            .where(
+                InventoryReservation.checkout_session_id == session_id,
+                InventoryReservation.status == "active",
+            )
+            .distinct()
+        )
+        return sorted(rows.all())
+
+    async def set_reservation_status(
+        self, reservation_ids: Sequence[uuid.UUID], status: str
+    ) -> None:
+        if reservation_ids:
+            await self._session.execute(
+                update(InventoryReservation)
+                .where(InventoryReservation.id.in_(reservation_ids))
+                .values(status=status)
+            )
+
+    async def extend_reservations(self, session_id: uuid.UUID, expires_at: datetime) -> None:
+        await self._session.execute(
+            update(InventoryReservation)
+            .where(
+                InventoryReservation.checkout_session_id == session_id,
+                InventoryReservation.status == "active",
+            )
+            .values(expires_at=expires_at)
+        )
+
+    async def add_reserved(self, variant_id: uuid.UUID, delta: int) -> None:
+        """``quantity_reserved += delta``. The CHECK constraints are the backstop."""
+        await self._session.execute(
+            update(InventoryItem)
+            .where(InventoryItem.variant_id == variant_id)
+            .values(
+                quantity_reserved=InventoryItem.quantity_reserved + delta, updated_at=func.now()
+            )
+        )
 
     # ── Back in stock ─────────────────────────────────────────────────────
 

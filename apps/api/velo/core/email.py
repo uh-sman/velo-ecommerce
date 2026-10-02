@@ -23,10 +23,18 @@ logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
+class Attachment:
+    filename: str
+    content: bytes
+    mime_type: str = "application/pdf"
+
+
+@dataclass(frozen=True, slots=True)
 class EmailMessage:
     to: str
     subject: str
     text: str
+    attachments: tuple[Attachment, ...] = ()
 
 
 class Mailer(Protocol):
@@ -43,6 +51,14 @@ class SmtpMailer:
         mime["To"] = message.to
         mime["Subject"] = message.subject
         mime.set_content(message.text)
+        for attachment in message.attachments:
+            maintype, _, subtype = attachment.mime_type.partition("/")
+            mime.add_attachment(
+                attachment.content,
+                maintype=maintype,
+                subtype=subtype,
+                filename=attachment.filename,
+            )
 
         password = self._settings.smtp_password
         try:

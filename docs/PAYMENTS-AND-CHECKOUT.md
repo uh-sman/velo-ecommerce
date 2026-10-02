@@ -42,31 +42,36 @@ These are not guidelines. Violating any one of them is a defect, not a trade-off
         webhook:       │        │      webhook: payment_intent.payment_failed
         succeeded      │        │
               ┌────────▼──┐  ┌──▼──────┐
-              │ confirmed │  │ failed  │  reservation released, cart intact,
-              └───────────┘  └────┬────┘  customer may retry
+              │ confirmed │  │ failed  │  reservation HELD until the TTL,
+              └───────────┘  └────┬────┘  cart intact, customer may retry
               order created       │
               stock committed     └──────▶ back to payment_pending on retry
 
-  Any non-terminal state + TTL elapsed ──▶ expired  (reservation released)
+  Any state but payment_pending + TTL elapsed ──▶ expired  (reservation released)
+  payment_pending past its TTL ──▶ reconciliation asks the provider (§7)
 ```
 
-**Every transition is validated server-side.** A request to set a shipping method on a `confirmed` session is rejected with `409`, not tolerated. The state machine is a table of allowed `(from, to)` pairs, and anything absent from that table is an error.
+**Every transition is validated server-side.** A request to set a shipping method on a `confirmed` session is rejected with `409`, not tolerated. The state machine is a table of allowed `(from, to)` pairs, and anything absent from that table is an error. The table lives in `apps/api/velo/domains/checkout/state.py`:
 
 ```python
-ALLOWED: dict[Status, set[Status]] = {
+ALLOWED: dict[Status, frozenset[Status]] = {
     Status.INITIATED:       {Status.ADDRESS_SET, Status.EXPIRED, Status.ABANDONED},
     Status.ADDRESS_SET:     {Status.ADDRESS_SET, Status.SHIPPING_SET, Status.EXPIRED, Status.ABANDONED},
     Status.SHIPPING_SET:    {Status.ADDRESS_SET, Status.SHIPPING_SET, Status.PAYMENT_PENDING,
                              Status.EXPIRED, Status.ABANDONED},
     Status.PAYMENT_PENDING: {Status.CONFIRMED, Status.FAILED, Status.EXPIRED},
-    Status.FAILED:          {Status.PAYMENT_PENDING, Status.EXPIRED},
-    Status.CONFIRMED:       set(),   # terminal — an order exists
-    Status.EXPIRED:         set(),
-    Status.ABANDONED:       set(),
+    Status.FAILED:          {Status.PAYMENT_PENDING, Status.CONFIRMED, Status.EXPIRED, Status.ABANDONED},
+    Status.CONFIRMED:       set(),                # terminal — an order exists
+    Status.EXPIRED:         {Status.CONFIRMED},   # only a payment that already happened
+    Status.ABANDONED:       {Status.CONFIRMED},   # likewise
 }
 ```
 
 Note that `ADDRESS_SET → ADDRESS_SET` is allowed: customers change their mind about the delivery address, and that must not be an error.
+
+**Why a failed payment keeps its reservation.** With Stripe, a declined card leaves the intent open: the customer tries another card _inside the Payment Element_, on the same intent, without calling our API. If the decline released the stock, that retry could succeed for a unit someone else has since bought. So `failed` holds the reservation until the checkout's TTL, and the sweeper releases it then.
+
+**Why `expired`, `abandoned` and `failed` can become `confirmed`.** Each of these is a checkout whose payment might still arrive: a declined intent retried and paid, a webhook that crossed the sweeper, a Paystack transaction (which cannot be cancelled) paid late. Money taken means an order is owed (principle 8), so settlement confirms the checkout and creates the order. If the reservation had lapsed, stock is taken from what is free; any shortfall is recorded on the order as `metadata.attention` and an alert goes to staff. Nothing refuses a paid order. Reconciliation also cancels declined intents on ended checkouts at the provider, so this stays rare.
 
 ---
 
@@ -251,7 +256,7 @@ Acknowledging fast is not a performance nicety. Stripe times out at 20 seconds a
 | Event                           | Action                                                                                                   |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `payment_intent.succeeded`      | Commit reservations, decrement stock, **create the order**, mark payment succeeded, emit `order.created` |
-| `payment_intent.payment_failed` | Release reservations, mark payment failed, keep the cart, notify the customer                            |
+| `payment_intent.payment_failed` | Mark payment failed, keep the cart and the reservation (§2), notify the customer                         |
 | `payment_intent.canceled`       | Release reservations, expire the checkout session                                                        |
 | `charge.refunded`               | Update refund status and `orders.refunded_amount`                                                        |
 | `charge.dispute.created`        | Flag the order, alert staff, freeze fulfilment                                                           |
@@ -347,6 +352,8 @@ email the customer
 - Every refund records an actor and a reason code. "Who authorised this?" must always be answerable.
 - Restocking is an explicit decision at the point of refund, not an automatic side effect — returned goods are frequently damaged.
 
+**As built (Phase 9, `domains/orders/refunds.py`).** The refund row is written `pending`, with the payment row locked, and committed _before_ the provider is called; the call carries the refund's own id as its idempotency key. The attempt is counted before calling out, so a crash mid-call is visible. A refund left unsubmitted — a crash, or the provider down — is resubmitted by `reconcile_refunds` every five minutes. Stripe deduplicates on the key, so that is safe. **Paystack takes no idempotency key on refunds**: a Paystack refund whose first attempt has an unknown outcome is never retried blind — it raises `refund.needs_attention` for someone to check the dashboard. When the `charge.refunded` webhook arrives for a refund we issued, it finds our row by the provider's refund id (or, when the provider does not name the refund, absorbs our pending ones first) and never records the money twice.
+
 ---
 
 ## 9. PCI-DSS scope
@@ -406,32 +413,34 @@ Every one of these has a designed state in the UI. None of them may produce a bl
 
 No part of this subsystem ships without every row below passing.
 
+Tests live in `apps/api/tests/unit/test_checkout_state.py`, `test_payment_providers.py`, `test_pci_scope.py`, and `apps/api/tests/integration/test_checkout.py`, `test_checkout_concurrency.py`.
+
 ### Unit
 
-- [ ] Every legal state transition; every illegal one rejected
-- [ ] Total assembly: subtotal, discount, shipping, tax, rounding
-- [ ] Property-based: totals never negative, discount never exceeds subtotal, rounding never invents or loses a cent
-- [ ] Refund validation against capture ceiling, including cumulative partials
+- [x] Every legal state transition; every illegal one rejected — _all 64 pairs_
+- [x] Total assembly: subtotal, discount, shipping, tax, rounding — _Phase 7, `test_pricing.py`_
+- [x] Property-based: totals never negative, discount never exceeds subtotal, rounding never invents or loses a cent — _Phase 7, `test_pricing_properties.py`_
+- [x] Refund validation against capture ceiling, including cumulative partials — _`test_orders.py::test_refunds_never_exceed_the_capture`; line units priced cumulatively (`test_order_rules.py`, Hypothesis)_
 
 ### Integration
 
-- [ ] Full checkout → intent → webhook → order
-- [ ] Idempotency: same key twice returns an identical response, executes once
-- [ ] Idempotency: same key, different body → 422
-- [ ] Idempotency: concurrent requests with the same key → one executes, one gets 409
-- [ ] Webhook with an invalid signature → 400, nothing written
-- [ ] Duplicate webhook → 200, one order
-- [ ] Out-of-order webhooks (`failed` after `succeeded`) → correct final state
-- [ ] Reconciliation creates the order when no webhook arrived
-- [ ] Reservation expiry returns stock
-- [ ] Price change between cart and payment → total recomputed, customer informed
+- [x] Full checkout → intent → webhook → order
+- [x] Idempotency: same key twice returns an identical response, executes once
+- [x] Idempotency: same key, different body → 422
+- [x] Idempotency: concurrent requests with the same key → one executes, one gets 409
+- [x] Webhook with an invalid signature → 400, nothing written
+- [x] Duplicate webhook → 200, one order
+- [x] Out-of-order webhooks (`failed` after `succeeded`) → correct final state
+- [x] Reconciliation creates the order when no webhook arrived
+- [x] Reservation expiry returns stock
+- [x] Price change between cart and payment → total recomputed, customer informed
 
 ### Concurrency — _the suite that matters most_
 
-- [ ] N simultaneous checkouts, 1 unit of stock, N ∈ {2, 10, 100} → exactly 1 order, N−1 clean `409 out of stock`
-- [ ] Simultaneous discount redemptions against `max_redemptions = 1` → exactly 1 succeeds
+- [x] N simultaneous checkouts, 1 unit of stock, N ∈ {2, 10, 100} → exactly 1 order, N−1 clean `409 out of stock`
+- [x] Simultaneous discount redemptions against `max_redemptions = 1` → exactly 1 succeeds — _at payment: the first payment holds the redemption, the rest get `422 discount-expired`_
 - [ ] Simultaneous cart mutations → no lost updates
-- [ ] Simultaneous refunds totalling more than the capture → the second is rejected
+- [x] Simultaneous refunds totalling more than the capture → the second is rejected — _four at once, one succeeds: `test_simultaneous_refunds_totalling_more_than_the_capture`_
 
 ### End-to-end (Playwright, real Stripe test mode)
 
@@ -448,7 +457,44 @@ No part of this subsystem ships without every row below passing.
 
 ---
 
-## 12. Launch checklist
+## 12. Operating it
+
+Where the pieces live, and what to do when an alert fires.
+
+| Piece             | Code                                           | Runs                                              |
+| ----------------- | ---------------------------------------------- | ------------------------------------------------- |
+| Checkout API      | `velo/api/v1/checkout.py`, `domains/checkout/` | Per request                                       |
+| Webhook intake    | `velo/api/v1/webhooks.py`                      | Per delivery; stores, queues, answers 200         |
+| Event processing  | `domains/checkout/processing.py`               | Worker job, queued per event; retried each minute |
+| Order creation    | `domains/checkout/settlement.py`               | Inside event processing and reconciliation        |
+| Reconciliation    | `Reconciler`                                   | Worker cron, every 15 minutes                     |
+| Checkout sweeper  | `CheckoutSweeper`                              | Worker cron, every minute                         |
+| Provider adapters | `domains/payments/stripe.py`, `paystack.py`    | —                                                 |
+
+**Alerts** arrive at `VELO_OPS_ALERT_EMAIL` and in the logs at `error` level, as outbox events:
+
+| Alert                         | Means                                                                     | Do                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `payment_event.dead_lettered` | A webhook failed processing five times                                    | Read `payment_events.processing_error`, fix the cause, then replay (below) |
+| `order.needs_attention`       | An order was paid for stock it could not fully take, or an amount differs | Contact the customer: ship when restocked, or refund the short lines       |
+| `payment.duplicate`           | A second payment succeeded for a checkout that already has its order      | Refund that payment in the provider's dashboard; the webhook records it    |
+| `payment.stuck`               | A payment has been `processing` at the provider for over 24 hours         | Check it in the provider's dashboard                                       |
+| `order.dispute_opened`        | A chargeback                                                              | Hold fulfilment; respond in the provider's dashboard before its deadline   |
+
+**Replaying dead-lettered webhooks**, once the cause is fixed. Replaying is safe: settlement is idempotent, so an event already applied changes nothing.
+
+```bash
+cd apps/api
+uv run python -m velo.scripts.payment_events              # list them
+uv run python -m velo.scripts.payment_events --replay ID  # one
+uv run python -m velo.scripts.payment_events --replay-all # all
+```
+
+**Local webhooks.** `stripe listen --forward-to localhost:8000/api/v1/webhooks/stripe` forwards test-mode events and prints the `whsec_…` secret for `VELO_STRIPE_WEBHOOK_SECRET`. The worker must be running (`uv run arq velo.worker.WorkerSettings`) for events to turn into orders.
+
+---
+
+## 13. Launch checklist
 
 - [ ] Stripe account activated; live keys in the production secret manager only
 - [ ] Live webhook endpoint registered, signing secret configured, a test event delivered and processed

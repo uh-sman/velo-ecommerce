@@ -301,11 +301,15 @@ class AddressRepository:
         )
         return _address(row) if row else None
 
-    async def create(self, user_id: uuid.UUID, **values: Any) -> AddressRecord:
+    async def create(self, user_id: uuid.UUID | None, **values: Any) -> AddressRecord:
         row = Address(user_id=user_id, **values)
         self._session.add(row)
         await self._session.flush()
         return _address(row)
+
+    async def by_id(self, address_id: uuid.UUID) -> AddressRecord | None:
+        row = await self._session.scalar(select(Address).where(Address.id == address_id))
+        return _address(row) if row else None
 
     async def update(
         self, user_id: uuid.UUID, address_id: uuid.UUID, **values: Any

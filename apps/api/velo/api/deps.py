@@ -11,12 +11,13 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from velo.api.cookies import ACCESS_COOKIE, CART_COOKIE
+from velo.api.cookies import ACCESS_COOKIE, CART_COOKIE, CHECKOUT_COOKIE
 from velo.core.config import Settings, get_settings
 from velo.core.email import Mailer, SmtpMailer
 from velo.core.errors import ForbiddenError, UnauthenticatedError
@@ -34,6 +35,8 @@ from velo.domains.catalog.csv_io import CatalogCsvService
 from velo.domains.catalog.reviews import ReviewService
 from velo.domains.catalog.search import SearchService
 from velo.domains.catalog.service import CatalogService
+from velo.domains.catalog.wishlist import WishlistService
+from velo.domains.checkout.service import CheckoutAccess, CheckoutService
 from velo.domains.discounts.service import DiscountService
 from velo.domains.identity.addresses import AddressService
 from velo.domains.identity.breach import BreachChecker, NoBreachChecker, PwnedPasswordsChecker
@@ -41,6 +44,14 @@ from velo.domains.identity.permissions import Permission, has_permission
 from velo.domains.identity.repository import UserRecord
 from velo.domains.identity.service import AuthService, ClientInfo
 from velo.domains.inventory.service import InventoryService
+from velo.domains.orders.fulfilment import FulfilmentService
+from velo.domains.orders.lifecycle import OrderLifecycle
+from velo.domains.orders.queries import OrderReader
+from velo.domains.orders.refunds import RefundService
+from velo.domains.orders.returns import ReturnService
+from velo.domains.orders.service import OrderService
+from velo.domains.payments.registry import PaymentProviders, build_providers
+from velo.domains.payments.service import IdempotencyService, PaymentService
 from velo.domains.platform.events import Actor
 from velo.domains.shipping.service import RulesTaxProvider, ShippingService
 
@@ -305,3 +316,131 @@ def get_cart_owner(request: Request, principal: OptionalPrincipalDep) -> CartOwn
 
 
 CartOwnerDep = Annotated[CartOwner, Depends(get_cart_owner)]
+
+
+# ── Checkout and payments ─────────────────────────────────────────────────────
+
+_providers: PaymentProviders | None = None
+
+
+def get_payment_providers(settings: SettingsDep) -> PaymentProviders:
+    """One set per process: each provider holds an HTTP connection pool."""
+    global _providers
+    if _providers is None:
+        _providers = build_providers(settings)
+    return _providers
+
+
+async def close_payment_providers() -> None:
+    global _providers
+    if _providers is not None:
+        await _providers.aclose()
+    _providers = None
+
+
+ProvidersDep = Annotated[PaymentProviders, Depends(get_payment_providers)]
+
+
+def get_payment_service(session: SessionDep) -> PaymentService:
+    return PaymentService(session)
+
+
+def get_idempotency_service(session: SessionDep) -> IdempotencyService:
+    return IdempotencyService(session)
+
+
+PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
+IdempotencyDep = Annotated[IdempotencyService, Depends(get_idempotency_service)]
+
+
+def get_checkout_service(
+    session: SessionDep,
+    settings: SettingsDep,
+    cart: CartServiceDep,
+    inventory: InventoryServiceDep,
+    providers: ProvidersDep,
+) -> CheckoutService:
+    return CheckoutService(
+        session,
+        cart=cart,
+        inventory=inventory,
+        discounts=DiscountService(session),
+        addresses=AddressService(session),
+        payments=PaymentService(session),
+        orders=OrderService(session),
+        providers=providers,
+        secret=settings.secret_key.get_secret_value(),
+        ttl=timedelta(minutes=settings.checkout_ttl_minutes),
+    )
+
+
+CheckoutServiceDep = Annotated[CheckoutService, Depends(get_checkout_service)]
+
+
+def get_checkout_access(request: Request, principal: OptionalPrincipalDep) -> CheckoutAccess:
+    return CheckoutAccess(
+        user_id=principal.user_id if principal else None,
+        token=request.cookies.get(CHECKOUT_COOKIE),
+    )
+
+
+CheckoutAccessDep = Annotated[CheckoutAccess, Depends(get_checkout_access)]
+
+
+# ── Orders, fulfilment, refunds, returns (Phase 9) ────────────────────────────
+
+
+def get_order_reader(
+    session: SessionDep, settings: SettingsDep, providers: ProvidersDep
+) -> OrderReader:
+    return OrderReader(
+        session,
+        providers,
+        secret=settings.secret_key.get_secret_value(),
+        return_window_days=settings.return_window_days,
+    )
+
+
+def get_order_lifecycle(
+    session: SessionDep, providers: ProvidersDep, inventory: InventoryServiceDep
+) -> OrderLifecycle:
+    return OrderLifecycle(session, providers, inventory)
+
+
+def get_fulfilment_service(session: SessionDep) -> FulfilmentService:
+    return FulfilmentService(session)
+
+
+def get_refund_service(
+    session: SessionDep, providers: ProvidersDep, inventory: InventoryServiceDep
+) -> RefundService:
+    return RefundService(session, providers, inventory)
+
+
+def get_return_service(
+    session: SessionDep,
+    settings: SettingsDep,
+    providers: ProvidersDep,
+    inventory: InventoryServiceDep,
+) -> ReturnService:
+    return ReturnService(
+        session, providers, window_days=settings.return_window_days, inventory=inventory
+    )
+
+
+OrderReaderDep = Annotated[OrderReader, Depends(get_order_reader)]
+OrderLifecycleDep = Annotated[OrderLifecycle, Depends(get_order_lifecycle)]
+FulfilmentServiceDep = Annotated[FulfilmentService, Depends(get_fulfilment_service)]
+RefundServiceDep = Annotated[RefundService, Depends(get_refund_service)]
+ReturnServiceDep = Annotated[ReturnService, Depends(get_return_service)]
+
+OrdersReaderDep = Annotated[Principal, Depends(require_permission(Permission.ORDERS_READ))]
+OrdersFulfilDep = Annotated[Actor, Depends(staff_actor(Permission.ORDERS_FULFIL))]
+OrdersRefundDep = Annotated[Actor, Depends(staff_actor(Permission.ORDERS_REFUND))]
+
+
+def get_wishlist_service(session: SessionDep, catalog: CatalogServiceDep) -> WishlistService:
+    return WishlistService(session, catalog)
+
+
+WishlistServiceDep = Annotated[WishlistService, Depends(get_wishlist_service)]

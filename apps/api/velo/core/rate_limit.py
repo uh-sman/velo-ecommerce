@@ -45,6 +45,10 @@ SEARCH_PER_IP = Rule("search-ip", 60, 60)  # API-SPEC.md §1: search, 60 / min /
 CART_MUTATIONS = Rule("cart", 60, 60)  # API-SPEC.md §1: 60 / min / cart
 # Guessing discount codes: generous for a person, useless for a script.
 DISCOUNT_CODE_PER_IP = Rule("discount-code-ip", 20, 60 * 60)
+CHECKOUT_PER_IP = Rule("checkout-ip", 10, 60 * 60)  # API-SPEC.md §1: 10 / h / IP
+PAYMENT_INTENT_PER_CHECKOUT = Rule("payment-intent", 10, 60 * 60)  # 10 / h / session
+# Guest order lookup: number + email is guessable only by brute force; keep it slow.
+ORDER_LOOKUP_PER_IP = Rule("order-lookup-ip", 10, 60 * 60)
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,6 +11,15 @@ Jobs:
 - ``reindex_search`` — rebuild the search index from Postgres and swap it in.
 - ``reconcile_search`` — hourly: find products the index is missing or should
   no longer have, and repair them.
+- ``process_payment_event`` — apply one stored provider webhook, queued by the
+  webhook route (PAYMENTS-AND-CHECKOUT.md §6). ``retry_payment_events`` runs
+  every minute for retries and anything the queue lost.
+- ``reconcile_payments`` — every 15 minutes: settle payments no webhook has
+  settled, from the provider's own record (§7).
+- ``sweep_checkouts`` — every minute: expire checkouts past their time and
+  release their stock.
+- ``reconcile_refunds`` — every 5 minutes: submit refunds a crash or a
+  provider outage left recorded but unsent (orders/refunds.py).
 
 Delivery is at least once. Every handler is idempotent: indexing upserts,
 invalidation deletes, and a back-in-stock subscriber is marked notified in the
@@ -30,19 +39,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import velo.db.models  # noqa: F401 — register every mapper; FKs cross domains
 from velo.core.config import Settings, get_settings
-from velo.core.email import EmailMessage, Mailer, SmtpMailer
+from velo.core.email import Attachment, EmailMessage, Mailer, SmtpMailer
 from velo.core.jobs import RELAY_JOB, redis_settings
 from velo.core.logging import configure_logging, get_logger
 from velo.core.meili import MeiliClient, SearchUnavailableError
 from velo.core.storage import MediaStorage
 from velo.db.redis import close_redis, get_redis, init_redis
-from velo.db.session import dispose_engine, init_engine, session_scope
+from velo.db.session import dispose_engine, init_engine, open_session, session_scope
 from velo.domains.cart.service import CartSweeper
 from velo.domains.catalog.cache import CatalogCache
 from velo.domains.catalog.images import InvalidImageError, process
 from velo.domains.catalog.repository import CatalogRepository
 from velo.domains.catalog.search import SearchIndexer
+from velo.domains.checkout.processing import (
+    CheckoutSweeper,
+    PaymentEventProcessor,
+    Reconciler,
+    build_settlement,
+)
 from velo.domains.inventory.service import InventoryService
+from velo.domains.orders.documents import invoice_pdf
+from velo.domains.orders.refunds import RefundService
+from velo.domains.orders.repository import OrderRepository
+from velo.domains.orders.rules import order_token
+from velo.domains.orders.service import OrderService
+from velo.domains.payments.registry import PaymentProviders, build_providers
 from velo.domains.platform.events import OutboxRepository, PendingEvent, record_event
 
 logger = get_logger(__name__)
@@ -67,9 +88,25 @@ class Worker:
         self.storage = MediaStorage(settings)
         self.mailer: Mailer = SmtpMailer(settings)
         self.cache = CatalogCache(get_redis(), settings.catalog_cache_ttl_seconds)
+        self.providers: PaymentProviders = build_providers(settings)
 
     def indexer(self, session: AsyncSession) -> SearchIndexer:
         return SearchIndexer(session, self.meili, self.settings.meilisearch_index)
+
+    def event_processor(self, session: AsyncSession) -> PaymentEventProcessor:
+        return PaymentEventProcessor(
+            session,
+            providers=self.providers,
+            settlement=build_settlement(session, self.settings, self.cache),
+        )
+
+    def reconciler(self, session: AsyncSession) -> Reconciler:
+        return Reconciler(
+            session,
+            providers=self.providers,
+            settlement=build_settlement(session, self.settings, self.cache),
+            after=timedelta(minutes=self.settings.payment_reconcile_after_minutes),
+        )
 
 
 def _worker(ctx: dict[str, Any]) -> Worker:
@@ -186,6 +223,27 @@ async def _handle(ctx: dict[str, Any], session: AsyncSession, event: PendingEven
             await ctx["redis"].enqueue_job("process_media", str(event.aggregate_id))
         case "media.deleted":
             await worker.storage.delete_prefix(event.payload["prefix"])
+        case "order.created":
+            await _order_confirmation(worker, session, event)
+        case "payment.failed":
+            await _payment_failed(worker, event)
+        case "refund.issued":
+            await _refund_issued(worker, event)
+        case "order.shipped":
+            await _order_shipped(worker, event)
+        case "order.cancelled":
+            await _order_cancelled(worker, event)
+        case "return.requested" | "return.approved" | "return.rejected":
+            await _return_update(worker, event)
+        case (
+            "order.needs_attention"
+            | "order.dispute_opened"
+            | "payment.duplicate"
+            | "payment.stuck"
+            | "payment_event.dead_lettered"
+            | "refund.needs_attention"
+        ):
+            await _payments_alert(worker, event)
         case _:
             logger.info("outbox_event_ignored", event_type=event.event_type)
 
@@ -234,6 +292,233 @@ async def _back_in_stock(worker: Worker, session: AsyncSession, variant_id: uuid
         )
     await inventory.mark_notified([subscriber.id for subscriber in subscribers])
     logger.info("back_in_stock_notified", sku=label.sku, subscribers=len(subscribers))
+
+
+# ── Orders and payments: the emails (Phase 12 moves these to templates) ──────
+
+_ZERO_DECIMAL = {"JPY", "KRW", "VND", "CLP", "ISK", "UGX", "XAF", "XOF"}
+
+
+def _amount(minor: Any, currency: str) -> str:
+    value = int(minor or 0)
+    if currency in _ZERO_DECIMAL:
+        return f"{currency} {value:,}"
+    return f"{currency} {value / 100:,.2f}"
+
+
+async def _order_confirmation(worker: Worker, session: AsyncSession, event: PendingEvent) -> None:
+    payload = event.payload
+    currency = str(payload.get("currency", ""))
+    items = await OrderService(session).items(event.aggregate_id)
+    lines = "\n".join(
+        f"  {item.quantity} x {item.product_title}"
+        + (f" ({item.variant_title})" if item.variant_title else "")
+        + f" — {_amount(item.unit_price_amount * item.quantity, currency)}"
+        for item in items
+    )
+    link = _order_link(worker, event.aggregate_id, str(payload.get("order_number")))
+    attachments: tuple[Attachment, ...] = ()
+    order = await OrderRepository(session).get(event.aggregate_id)
+    if order is not None:
+        invoice = invoice_pdf(
+            order, items, store_name=worker.settings.store_name, payment_label=None
+        )
+        attachments = (Attachment(f"invoice-{order.order_number}.pdf", invoice),)
+    await worker.mailer.send(
+        EmailMessage(
+            to=str(payload["email"]),
+            subject=f"Order {payload.get('order_number')} confirmed",
+            text=(
+                f"Thank you — your payment went through and your order "
+                f"{payload.get('order_number')} is confirmed.\n\n{lines}\n\n"
+                f"Total: {_amount(payload.get('total'), currency)}\n\n"
+                f"Track it here: {link}\n\n"
+                "Your invoice is attached. We will email you again when it ships."
+            ),
+            attachments=attachments,
+        )
+    )
+
+
+def _order_link(worker: Worker, order_id: uuid.UUID, number: str) -> str:
+    """The signed link: opens the order without signing in (PAGE-SPECS.md §1.4)."""
+    token = order_token(worker.settings.secret_key.get_secret_value(), order_id)
+    return f"{worker.settings.storefront_url}/orders/{number}?token={token}"
+
+
+async def _order_shipped(worker: Worker, event: PendingEvent) -> None:
+    payload = event.payload
+    number = str(payload.get("order_number"))
+    lines = "\n".join(
+        f"  {line.get('quantity')} x {line.get('title')}"
+        + (f" ({line.get('variant')})" if line.get("variant") else "")
+        for line in payload.get("lines", [])
+    )
+    tracking = ""
+    if payload.get("tracking_number"):
+        carrier = str(payload.get("carrier") or "the carrier").upper()
+        tracking = f"\n\nTracking with {carrier}: {payload['tracking_number']}"
+        if payload.get("tracking_url"):
+            tracking += f"\n{payload['tracking_url']}"
+    rest = "" if payload.get("complete") else "\n\nThe rest of your order follows separately."
+    await worker.mailer.send(
+        EmailMessage(
+            to=str(payload["email"]),
+            subject=f"Order {number} is on its way",
+            text=(
+                f"Good news — order {number} has shipped:\n\n{lines}{tracking}{rest}\n\n"
+                f"Your order: {_order_link(worker, event.aggregate_id, number)}"
+            ),
+        )
+    )
+
+
+async def _order_cancelled(worker: Worker, event: PendingEvent) -> None:
+    payload = event.payload
+    number = str(payload.get("order_number"))
+    who = "as you asked" if payload.get("by_customer") else "by our team"
+    await worker.mailer.send(
+        EmailMessage(
+            to=str(payload["email"]),
+            subject=f"Order {number} is cancelled",
+            text=(
+                f"Order {number} has been cancelled {who}. Anything you paid is being "
+                "refunded to your original payment method; you will get a separate email "
+                "when the refund is issued."
+            ),
+        )
+    )
+
+
+async def _return_update(worker: Worker, event: PendingEvent) -> None:
+    payload = event.payload
+    number = str(payload.get("order_number"))
+    rma = str(payload.get("rma_number"))
+    note = f"\n\nNote from our team: {payload['note']}" if payload.get("note") else ""
+    match event.event_type:
+        case "return.requested":
+            subject = f"We have your return request {rma}"
+            body = (
+                f"We have received your request to return items from order {number}. "
+                "We will review it shortly and email you the next steps."
+            )
+            if worker.settings.ops_alert_email:
+                await worker.mailer.send(
+                    EmailMessage(
+                        to=worker.settings.ops_alert_email,
+                        subject=f"Return requested: {rma} (order {number})",
+                        text="A customer has asked to return items. Review it in the admin.",
+                    )
+                )
+        case "return.approved":
+            subject = f"Return {rma} approved — how to send it back"
+            body = (
+                f"Your return {rma} for order {number} is approved. Print the return label "
+                "from your order page, pack the items with it, and send the parcel to the "
+                "address on the label. We refund once it arrives and is checked."
+            )
+        case _:
+            subject = f"About your return request {rma}"
+            body = (
+                f"We are unable to accept the return {rma} for order {number}. "
+                "Reply to this email if you have any questions."
+            )
+    await worker.mailer.send(
+        EmailMessage(to=str(payload["email"]), subject=subject, text=body + note)
+    )
+
+
+async def _payment_failed(worker: Worker, event: PendingEvent) -> None:
+    email = event.payload.get("email")
+    if not email:
+        return
+    await worker.mailer.send(
+        EmailMessage(
+            to=str(email),
+            subject="Your payment did not go through",
+            text=(
+                "Your card was declined, so we have not taken any money and your order "
+                "has not been placed. Your cart is saved and the items are held for a "
+                "little while — you can try another card or payment method from the "
+                f"checkout.\n\n{worker.settings.storefront_url}/cart"
+            ),
+        )
+    )
+
+
+async def _refund_issued(worker: Worker, event: PendingEvent) -> None:
+    payload = event.payload
+    currency = str(payload.get("currency", ""))
+    await worker.mailer.send(
+        EmailMessage(
+            to=str(payload["email"]),
+            subject=f"Refund for order {payload.get('order_number')}",
+            text=(
+                f"We have refunded {_amount(payload.get('amount'), currency)} for order "
+                f"{payload.get('order_number')}. It usually reaches your account within "
+                "5 to 10 working days, depending on your bank."
+            ),
+        )
+    )
+
+
+async def _payments_alert(worker: Worker, event: PendingEvent) -> None:
+    """Something about money needs a person. Logged at error level, and emailed."""
+    logger.error("payments_alert", event_type=event.event_type, **event.payload)
+    if not worker.settings.ops_alert_email:
+        return
+    details = "\n".join(f"{key}: {value}" for key, value in sorted(event.payload.items()))
+    await worker.mailer.send(
+        EmailMessage(
+            to=worker.settings.ops_alert_email,
+            subject=f"Payments alert: {event.event_type}",
+            text=(
+                f"{event.event_type} for {event.aggregate_type} {event.aggregate_id}\n\n"
+                f"{details}\n\nWhat to do: docs/PAYMENTS-AND-CHECKOUT.md §12, Operating it."
+            ),
+        )
+    )
+
+
+# ── Payments ──────────────────────────────────────────────────────────────────
+
+
+async def process_payment_event(ctx: dict[str, Any], event_id: str) -> str:
+    async with open_session() as session:
+        outcome = await _worker(ctx).event_processor(session).process(uuid.UUID(event_id))
+    await ctx["redis"].enqueue_job(RELAY_JOB, _job_id=RELAY_JOB)  # the order's emails
+    return outcome
+
+
+async def retry_payment_events(ctx: dict[str, Any]) -> dict[str, int]:
+    async with open_session() as session:
+        counts = await _worker(ctx).event_processor(session).process_due()
+    if counts:
+        logger.info("payment_events_retried", **counts)
+        await ctx["redis"].enqueue_job(RELAY_JOB, _job_id=RELAY_JOB)
+    return counts
+
+
+async def reconcile_payments(ctx: dict[str, Any]) -> dict[str, int]:
+    async with open_session() as session:
+        counts = await _worker(ctx).reconciler(session).run()
+    if counts:
+        await ctx["redis"].enqueue_job(RELAY_JOB, _job_id=RELAY_JOB)
+    return counts
+
+
+async def sweep_checkouts(ctx: dict[str, Any]) -> dict[str, int]:
+    async with open_session() as session:
+        return await CheckoutSweeper(session, InventoryService(session)).sweep()
+
+
+async def reconcile_refunds(ctx: dict[str, Any]) -> dict[str, int]:
+    async with open_session() as session:
+        counts = await RefundService(session, _worker(ctx).providers).submit_stranded()
+    if counts.get("found"):
+        logger.info("refunds_reconciled", **counts)
+        await ctx["redis"].enqueue_job(RELAY_JOB, _job_id=RELAY_JOB)
+    return counts
 
 
 # ── Media ─────────────────────────────────────────────────────────────────────
@@ -369,18 +654,35 @@ async def shutdown(ctx: dict[str, Any]) -> None:
     worker: Worker | None = ctx.get("worker")
     if worker is not None:
         await worker.meili.aclose()
+        await worker.providers.aclose()
     await close_redis()
     await dispose_engine()
     logger.info("worker_stopped")
 
 
 class WorkerSettings:
-    functions = [relay_outbox, process_media, reindex_search, reconcile_search, sweep_carts]  # noqa: RUF012
+    functions = [  # noqa: RUF012
+        relay_outbox,
+        process_media,
+        reindex_search,
+        reconcile_search,
+        sweep_carts,
+        process_payment_event,
+        retry_payment_events,
+        reconcile_payments,
+        sweep_checkouts,
+        reconcile_refunds,
+    ]
     cron_jobs = [  # noqa: RUF012
         # The safety net under the post-commit kick: nothing waits longer than this.
         cron(relay_outbox, second={0, 10, 20, 30, 40, 50}, run_at_startup=True, unique=True),
         cron(reconcile_search, minute={17}, unique=True),
         cron(sweep_carts, minute={5, 20, 35, 50}, unique=True),
+        # Payments. Reconciliation is the last job to disable and the first to test (§7).
+        cron(retry_payment_events, second={30}, unique=True),
+        cron(reconcile_payments, minute={0, 15, 30, 45}, run_at_startup=True, unique=True),
+        cron(sweep_checkouts, second={15}, unique=True),
+        cron(reconcile_refunds, minute=set(range(2, 60, 5)), unique=True),
     ]
     on_startup = startup
     on_shutdown = shutdown

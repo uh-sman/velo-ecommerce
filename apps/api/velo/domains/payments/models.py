@@ -30,7 +30,8 @@ class Payment(HasId, HasTimestamps, Base):
     order_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("orders.id", ondelete="SET NULL"))
     checkout_session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("checkout_sessions.id"))
     provider: Mapped[str]
-    provider_intent_id: Mapped[str]
+    # NULL between writing the payment and hearing back from the provider.
+    provider_intent_id: Mapped[str | None]
     provider_charge_id: Mapped[str | None]
     status: Mapped[str] = mapped_column(server_default="pending")
     amount: Mapped[int] = mapped_column(MinorUnits)
@@ -53,6 +54,7 @@ class Payment(HasId, HasTimestamps, Base):
         CheckConstraint("amount_captured <= amount", name="capture_within_amount"),
         UniqueConstraint("provider", "provider_intent_id"),
         Index("idx_payments_order", "order_id"),
+        Index("idx_payments_session", "checkout_session_id"),
         # Reconciliation: stranded payments in a non-terminal state.
         Index(
             "idx_payments_pending",
@@ -78,6 +80,10 @@ class PaymentEvent(HasId, Base):
     processed_at: Mapped[datetime | None]
     processing_error: Mapped[str | None]
     received_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    attempts: Mapped[int] = mapped_column(server_default=text("0"))
+    next_attempt_at: Mapped[datetime | None]
+    # Set after the last retry fails. Replayed by hand once the cause is fixed.
+    dead_lettered_at: Mapped[datetime | None]
 
     __table_args__ = (
         # The entire replay defence: a duplicate delivery violates this, is
@@ -87,6 +93,11 @@ class PaymentEvent(HasId, Base):
             "idx_payment_events_unprocessed",
             "received_at",
             postgresql_where=text("processed_at IS NULL"),
+        ),
+        Index(
+            "idx_payment_events_dead",
+            "dead_lettered_at",
+            postgresql_where=text("dead_lettered_at IS NOT NULL"),
         ),
     )
 
@@ -104,12 +115,46 @@ class Refund(HasId, HasCreatedAt, Base):
     status: Mapped[str] = mapped_column(server_default="pending")
     actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     note: Mapped[str | None]
+    # Written before the provider is called, then submitted after commit. A
+    # refund still unsubmitted after a crash is retried by reconciliation, with
+    # its own id as the idempotency key, so the provider refunds it once.
+    submitted_at: Mapped[datetime | None]
+    attempts: Mapped[int] = mapped_column(server_default=text("0"))
+    last_error: Mapped[str | None]
 
     __table_args__ = (
         CheckConstraint("amount > 0", name="amount_positive"),
         one_of("reason", *REFUND_REASONS),
         one_of("status", *REFUND_STATUSES),
         Index("idx_refunds_order", "order_id"),
+        Index("idx_refunds_payment", "payment_id"),
+        Index(
+            "idx_refunds_unsubmitted",
+            "created_at",
+            postgresql_where=text("status = 'pending' AND submitted_at IS NULL"),
+        ),
+    )
+
+
+class RefundItem(Base):
+    """Which lines a refund paid back, so a line is never refunded twice."""
+
+    __tablename__ = "refund_items"
+
+    refund_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("refunds.id", ondelete="CASCADE"), primary_key=True
+    )
+    order_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("order_items.id", ondelete="CASCADE"), primary_key=True
+    )
+    quantity: Mapped[int]
+    amount: Mapped[int] = mapped_column(MinorUnits)
+    restock: Mapped[bool] = mapped_column(server_default=text("false"))
+
+    __table_args__ = (
+        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint("amount >= 0", name="amount_non_negative"),
+        Index("idx_refund_items_item", "order_item_id"),
     )
 
 

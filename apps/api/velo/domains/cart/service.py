@@ -38,7 +38,7 @@ from velo.domains.cart.exceptions import (
     QuantityUnavailableError,
 )
 from velo.domains.cart.pricing import Ineligible, Line, PricingInput, PricingResult, price_cart
-from velo.domains.cart.repository import CartRecord, CartRepository, ItemRecord
+from velo.domains.cart.repository import CartRecord, CartRepository
 from velo.domains.cart.views import (
     AppliedDiscountView,
     CartItemView,
@@ -97,11 +97,38 @@ class CartResult:
     clear_guest_cookie: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class QuoteItem:
+    """A line to price: a variant and a quantity. ``id`` is the cart line it came from."""
+
+    id: uuid.UUID
+    variant_id: uuid.UUID
+    quantity: int
+    seen_price_amount: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CheckoutCart:
+    """What checkout takes from a cart: its identity, currency, code, and lines."""
+
+    id: uuid.UUID
+    user_id: uuid.UUID | None
+    currency: str
+    discount_code: str | None
+    items: list[QuoteItem]
+
+
 @dataclass(slots=True)
 class _Priced:
     result: PricingResult
-    lines: list[tuple[ItemRecord, VariantSnapshot | None, int]]  # item, snapshot, max quantity
+    lines: list[tuple[QuoteItem, VariantSnapshot | None, int]]  # item, snapshot, max quantity
     warnings: list[CartWarning] = field(default_factory=list)
+    code_problem: str | None = None  # set: the code cannot be used, and why
+
+
+# The public name for checkout: the priced result, each line's catalog
+# snapshot and sellable quantity, and the warnings a customer should see.
+Quote = _Priced
 
 
 def _money(amount: int, currency: str) -> MoneyJson:
@@ -225,7 +252,11 @@ class CartService:
             d for d in candidates.discounts if (d.code or "").casefold() == code.casefold()
         )
         priced = await self._price(
-            cart.id, cart.currency, code, estimate or Estimate(), user_id=owner.user_id
+            await self._items(cart.id),
+            cart.currency,
+            code,
+            estimate or Estimate(),
+            user_id=owner.user_id,
         )
         reason = priced.result.rejected.get(coded.id)
         if reason is not None and reason is not Ineligible.OUTCLASSED:
@@ -324,24 +355,89 @@ class CartService:
         view = await self._view(refreshed, estimate or Estimate(), extra_warnings or [])
         return CartResult(view=view, new_guest_token=new_token)
 
+    # ── Checkout's interface ──────────────────────────────────────────────
+
+    async def checkout_cart(self, owner: CartOwner) -> CheckoutCart | None:
+        """The caller's cart, locked for the checkout transaction, with its lines."""
+        cart = await self._find(owner, lock=True)
+        if cart is None:
+            return None
+        return CheckoutCart(
+            id=cart.id,
+            user_id=cart.user_id,
+            currency=cart.currency,
+            discount_code=cart.discount_code,
+            items=await self._items(cart.id),
+        )
+
+    async def quote(
+        self,
+        items: list[QuoteItem],
+        *,
+        currency: str,
+        code: str | None,
+        address: Address | None = None,
+        shipping_rate_id: uuid.UUID | None = None,
+        user_id: uuid.UUID | None = None,
+        email: str | None = None,
+        checkout_id: uuid.UUID | None = None,
+    ) -> Quote:
+        """Price these lines now, from the catalog — the same engine the cart uses.
+
+        With ``email``, a guest's order history counts toward first-order-only
+        and segment rules, which a cart alone cannot know (discounts/service.py).
+        """
+        return await self._price(
+            items,
+            currency,
+            code,
+            Estimate(address=address, shipping_rate_id=shipping_rate_id),
+            user_id=user_id,
+            email=email,
+            checkout_id=checkout_id,
+        )
+
+    async def consume(
+        self, cart_id: uuid.UUID, quantities: dict[uuid.UUID, int], *, code_used: bool
+    ) -> None:
+        """After an order commits: take what was bought off the cart, in its transaction.
+
+        Lines added since checkout began stay. A code that was redeemed is cleared.
+        """
+        await self._carts.reduce(cart_id, quantities)
+        if code_used:
+            await self._carts.set_code(cart_id, None)
+
     # ── Pricing and the view ──────────────────────────────────────────────
+
+    async def _items(self, cart_id: uuid.UUID) -> list[QuoteItem]:
+        return [
+            QuoteItem(
+                id=item.id,
+                variant_id=item.variant_id,
+                quantity=item.quantity,
+                seen_price_amount=item.seen_price_amount,
+            )
+            for item in await self._carts.items(cart_id)
+        ]
 
     async def _price(
         self,
-        cart_id: uuid.UUID,
+        items: list[QuoteItem],
         currency: str,
         code: str | None,
         estimate: Estimate,
         *,
         user_id: uuid.UUID | None = None,
+        email: str | None = None,
+        checkout_id: uuid.UUID | None = None,
     ) -> _Priced:
-        items = await self._carts.items(cart_id)
         variant_ids = [item.variant_id for item in items]
         snapshots = await self._catalog.variant_snapshots(variant_ids)
         limits = await self._inventory.sellable_quantities(variant_ids)
 
         lines: list[Line] = []
-        rows: list[tuple[ItemRecord, VariantSnapshot | None, int]] = []
+        rows: list[tuple[QuoteItem, VariantSnapshot | None, int]] = []
         warnings: list[CartWarning] = []
         for item in items:
             snapshot = snapshots.get(item.variant_id)
@@ -396,8 +492,9 @@ class CartService:
                 )
             )
 
-        customer = await self._discounts.customer(user_id)
-        candidates = await self._discounts.candidates(customer, code=code, now=self._clock())
+        discounts = self._discounts.for_checkout(checkout_id) if checkout_id else self._discounts
+        customer = await discounts.customer(user_id, email=email)
+        candidates = await discounts.candidates(customer, code=code, now=self._clock())
         address = estimate.address
         result = price_cart(
             PricingInput(
@@ -445,7 +542,14 @@ class CartService:
                     code="no_shipping", message="We do not ship these items to that address yet."
                 )
             )
-        return _Priced(result=result, lines=rows, warnings=warnings)
+        return _Priced(
+            result=result,
+            lines=rows,
+            warnings=warnings,
+            code_problem=(
+                candidates.code_problem.value if code and candidates.code_problem else None
+            ),
+        )
 
     async def _view(
         self,
@@ -476,7 +580,11 @@ class CartService:
                 warnings=[],
             )
         priced = await self._price(
-            cart.id, currency, cart.discount_code, estimate, user_id=cart.user_id
+            await self._items(cart.id),
+            currency,
+            cart.discount_code,
+            estimate,
+            user_id=cart.user_id,
         )
         result = priced.result
         by_line = {line.id: line for line in result.lines}

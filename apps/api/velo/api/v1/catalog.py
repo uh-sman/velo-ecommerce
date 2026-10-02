@@ -16,7 +16,12 @@ from velo.api.deps import (
 )
 from velo.core.errors import FieldError, ValidationError
 from velo.core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorPage
-from velo.domains.catalog.schemas import BackInStockRequest, ReviewCreate, ReviewView
+from velo.domains.catalog.schemas import (
+    BackInStockRequest,
+    ReviewCreate,
+    ReviewSummary,
+    ReviewView,
+)
 from velo.domains.catalog.service import ListingQuery
 from velo.domains.catalog.views import (
     CategoryNode,
@@ -114,6 +119,15 @@ async def list_reviews(
     cursor: str | None = None,
 ) -> CursorPage[ReviewView]:
     return await service.approved(slug, limit=limit, cursor=cursor)
+
+
+@router.get(
+    "/products/{slug}/reviews/summary",
+    response_model=ReviewSummary,
+    summary="Average, count, and how many reviews gave each star",
+)
+async def review_summary(slug: str, service: ReviewServiceDep) -> ReviewSummary:
+    return await service.summary(slug)
 
 
 @router.post(

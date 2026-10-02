@@ -67,6 +67,15 @@ class AddressService:
         await self._addresses.delete(user_id, address_id)
         await self._session.commit()
 
+    # ── Checkout's interface ──────────────────────────────────────────────
+
+    async def create_for_checkout(self, fields: dict[str, Any]) -> AddressRecord:
+        """A one-off address for a checkout, outside any address book. No commit."""
+        return await self._addresses.create(None, **fields)
+
+    async def by_id(self, address_id: uuid.UUID) -> AddressRecord | None:
+        return await self._addresses.by_id(address_id)
+
     async def _get(self, user_id: uuid.UUID, address_id: uuid.UUID) -> AddressRecord:
         address = await self._addresses.get(user_id, address_id)
         if address is None:

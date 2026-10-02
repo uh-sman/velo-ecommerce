@@ -236,3 +236,19 @@ class Review(HasId, HasCreatedAt, Base):
             postgresql_where=text("user_id IS NOT NULL AND order_id IS NOT NULL"),
         ),
     )
+
+
+class WishlistItem(HasCreatedAt, Base):
+    """A product a signed-in customer saved for later. Products, not variants:
+    the size is chosen when it is bought."""
+
+    __tablename__ = "wishlist_items"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    product_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("products.id", ondelete="CASCADE"), primary_key=True
+    )
+
+    __table_args__ = (Index("idx_wishlist_user", "user_id", text("created_at DESC")),)

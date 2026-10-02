@@ -302,11 +302,13 @@ async def test_reviews_are_moderated_before_they_count(
             f"/api/v1/admin/reviews/{submitted.json()['id']}", json={"status": "approved"}
         )
 
+        summary_before = (await anonymous.get(f"{path}/summary")).json()
         pending = (await admin.get("/api/v1/admin/reviews")).json()["data"]
         for review in pending:
             await admin.patch(f"/api/v1/admin/reviews/{review['id']}", json={"status": "approved"})
         after = (await anonymous.get(path)).json()["data"]
         rating = (await anonymous.get("/api/v1/products/reviewed-tee")).json()["rating"]
+        summary = (await anonymous.get(f"{path}/summary")).json()
 
     assert unauthenticated.status_code == 401
     assert submitted.status_code == 201
@@ -317,6 +319,13 @@ async def test_reviews_are_moderated_before_they_count(
     assert len(pending) == 2
     assert len(after) == 2
     assert rating == {"average": 3.0, "count": 2}
+    # Pending reviews are not in the distribution; approved ones are.
+    assert summary_before["count"] == 0
+    assert summary == {
+        "average": 3.0,
+        "count": 2,
+        "distribution": {"1": 0, "2": 1, "3": 0, "4": 1, "5": 0},
+    }
 
 
 async def test_rejecting_a_review_recomputes_the_rating(

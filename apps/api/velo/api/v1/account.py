@@ -1,12 +1,14 @@
-"""/account — the signed-in customer's address book (API-SPEC.md §2)."""
+"""/account — the signed-in customer's address book and wishlist (API-SPEC.md §2)."""
 
 from __future__ import annotations
 
 import uuid
 
 from fastapi import APIRouter, status
+from pydantic import BaseModel, ConfigDict
 
-from velo.api.deps import AddressServiceDep, PrincipalDep
+from velo.api.deps import AddressServiceDep, PrincipalDep, WishlistServiceDep
+from velo.domains.catalog.views import ProductCard
 from velo.domains.identity.schemas import AddressFields, AddressResponse, AddressUpdateRequest
 
 router = APIRouter(prefix="/account", tags=["account"])
@@ -60,3 +62,39 @@ async def delete_address(
     address_id: uuid.UUID, principal: PrincipalDep, service: AddressServiceDep
 ) -> None:
     await service.delete(principal.user_id, address_id)
+
+
+# ── Wishlist ──────────────────────────────────────────────────────────────────
+
+
+class SaveProduct(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: uuid.UUID
+
+
+@router.get("/wishlist", response_model=list[ProductCard], summary="Saved products, newest first")
+async def wishlist(principal: PrincipalDep, service: WishlistServiceDep) -> list[ProductCard]:
+    return await service.cards(principal.user_id)
+
+
+@router.post(
+    "/wishlist",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Save a product (saving twice is saving once)",
+)
+async def save_product(
+    body: SaveProduct, principal: PrincipalDep, service: WishlistServiceDep
+) -> None:
+    await service.add(principal.user_id, body.product_id)
+
+
+@router.delete(
+    "/wishlist/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a saved product (removing one not saved is fine)",
+)
+async def unsave_product(
+    product_id: uuid.UUID, principal: PrincipalDep, service: WishlistServiceDep
+) -> None:
+    await service.remove(principal.user_id, product_id)

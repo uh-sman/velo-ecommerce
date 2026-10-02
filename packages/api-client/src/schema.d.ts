@@ -40,6 +40,41 @@ export interface paths {
         patch: operations["update_address_api_v1_account_addresses__address_id__patch"];
         trace?: never;
     };
+    "/api/v1/account/wishlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Saved products, newest first */
+        get: operations["wishlist_api_v1_account_wishlist_get"];
+        put?: never;
+        /** Save a product (saving twice is saving once) */
+        post: operations["save_product_api_v1_account_wishlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/wishlist/{product_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a saved product (removing one not saved is fine) */
+        delete: operations["unsave_product_api_v1_account_wishlist__product_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/categories": {
         parameters: {
             query?: never;
@@ -110,6 +145,23 @@ export interface paths {
         head?: never;
         /** Update */
         patch: operations["update_collection_api_v1_admin_collections__collection_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/fulfilments/{fulfilment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update a parcel: tracking, delivered, failed */
+        patch: operations["update_fulfilment_api_v1_admin_fulfilments__fulfilment_id__patch"];
         trace?: never;
     };
     "/api/v1/admin/inventory": {
@@ -215,6 +267,159 @@ export interface paths {
         patch: operations["update_media_api_v1_admin_media__media_id__patch"];
         trace?: never;
     };
+    "/api/v1/admin/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Orders, newest first, with filters and search */
+        get: operations["list_orders_api_v1_admin_orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Order detail */
+        get: operations["get_order_api_v1_admin_orders__order_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel before shipping: restock and refund in full */
+        post: operations["cancel_api_v1_admin_orders__order_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}/fulfilments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ship some or all of an order */
+        post: operations["fulfil_api_v1_admin_orders__order_id__fulfilments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}/invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Invoice (PDF) */
+        get: operations["invoice_api_v1_admin_orders__order_id__invoice_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Internal note */
+        patch: operations["set_note_api_v1_admin_orders__order_id__notes_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}/packing-slip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Packing slip (PDF) */
+        get: operations["packing_slip_api_v1_admin_orders__order_id__packing_slip_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refund lines, shipping, or a goodwill amount */
+        post: operations["refund_api_v1_admin_orders__order_id__refunds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{order_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set processing or delivered by hand */
+        post: operations["set_status_api_v1_admin_orders__order_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/products": {
         parameters: {
             query?: never;
@@ -318,6 +523,41 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The returns queue */
+        get: operations["list_returns_api_v1_admin_returns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/returns/{return_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One return */
+        get: operations["get_return_api_v1_admin_returns__return_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Approve, reject, receive, refund or close a return */
+        patch: operations["update_return_api_v1_admin_returns__return_id__patch"];
         trace?: never;
     };
     "/api/v1/admin/reviews": {
@@ -722,6 +962,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start checkout: snapshot the priced cart and reserve its stock */
+        post: operations["start_checkout_api_v1_checkout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/{checkout_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** State and totals */
+        get: operations["get_checkout_api_v1_checkout__checkout_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/{checkout_id}/abandon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel the checkout and release its stock */
+        post: operations["abandon_api_v1_checkout__checkout_id__abandon_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/{checkout_id}/address": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set the shipping and billing addresses */
+        patch: operations["set_address_api_v1_checkout__checkout_id__address_patch"];
+        trace?: never;
+    };
+    "/api/v1/checkout/{checkout_id}/payment-intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recompute the total and create the provider's payment intent */
+        post: operations["payment_intent_api_v1_checkout__checkout_id__payment_intent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/{checkout_id}/shipping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Choose a shipping rate */
+        patch: operations["set_shipping_api_v1_checkout__checkout_id__shipping_patch"];
+        trace?: never;
+    };
+    "/api/v1/checkout/{checkout_id}/shipping-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The rates available for the address */
+        get: operations["shipping_rates_api_v1_checkout__checkout_id__shipping_rates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/collections": {
         parameters: {
             query?: never;
@@ -748,6 +1107,128 @@ export interface paths {
         };
         /** A collection with its products */
         get: operations["get_collection_api_v1_collections__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your orders, newest first */
+        get: operations["list_orders_api_v1_orders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Find a guest order by its number and email
+         * @description Returns the order with `access_token` for its signed link. 10 an hour per IP.
+         */
+        post: operations["lookup_api_v1_orders_lookup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One order */
+        get: operations["get_order_api_v1_orders__number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{number}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel before it ships */
+        post: operations["cancel_order_api_v1_orders__number__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{number}/invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Invoice (PDF) */
+        get: operations["invoice_api_v1_orders__number__invoice_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{number}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask to return shipped items */
+        post: operations["request_return_api_v1_orders__number__returns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{number}/returns/{rma}/label": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return label (PDF) */
+        get: operations["return_label_api_v1_orders__number__returns__rma__label_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -842,6 +1323,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/products/{slug}/reviews/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Average, count, and how many reviews gave each star */
+        get: operations["review_summary_api_v1_products__slug__reviews_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -890,6 +1388,64 @@ export interface paths {
         get: operations["system_info_api_v1_system_info_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/paystack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Paystack events (signed) */
+        post: operations["paystack_webhook_api_v1_webhooks_paystack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/stripe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stripe events (signed) */
+        post: operations["stripe_webhook_api_v1_webhooks_stripe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Carrier tracking updates (HMAC-SHA256 signed)
+         * @description ``X-Velo-Signature`` is the hex HMAC-SHA256 of the raw body under the shared secret.
+         *
+         *     Every parcel with the tracking number moves on. A status a parcel cannot
+         *     move to (say, delivered twice) is logged and acknowledged — refusing it
+         *     would only make the carrier retry.
+         */
+        post: operations["tracking_webhook_api_v1_webhooks_tracking_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -997,6 +1553,52 @@ export interface components {
             postal_code?: string | null;
             /** Region */
             region?: string | null;
+        };
+        /** AddressIn */
+        AddressIn: {
+            /** City */
+            city: string;
+            /** Company */
+            company?: string | null;
+            /** Country Code */
+            country_code: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Line1 */
+            line1: string;
+            /** Line2 */
+            line2?: string | null;
+            /** Phone */
+            phone?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** Region */
+            region?: string | null;
+        };
+        /** AddressOut */
+        AddressOut: {
+            /** City */
+            city: string;
+            /** Company */
+            company: string | null;
+            /** Country Code */
+            country_code: string;
+            /** First Name */
+            first_name: string;
+            /** Last Name */
+            last_name: string;
+            /** Line1 */
+            line1: string;
+            /** Line2 */
+            line2: string | null;
+            /** Phone */
+            phone: string | null;
+            /** Postal Code */
+            postal_code: string | null;
+            /** Region */
+            region: string | null;
         };
         /** AddressResponse */
         AddressResponse: {
@@ -1125,6 +1727,106 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** AdminOrderSummaryView */
+        AdminOrderSummaryView: {
+            /** Customer Name */
+            customer_name: string | null;
+            /** Email */
+            email: string;
+            /** Fulfilment Status */
+            fulfilment_status: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Item Count */
+            item_count: number;
+            /** Needs Attention */
+            needs_attention: boolean;
+            /** Number */
+            number: string;
+            /** Payment Status */
+            payment_status: string;
+            /**
+             * Placed At
+             * Format: date-time
+             */
+            placed_at: string;
+            /** Status */
+            status: string;
+            total: components["schemas"]["MoneyJson"];
+        };
+        /** AdminOrderView */
+        AdminOrderView: {
+            /** Access Token */
+            access_token?: string | null;
+            /** Admin Refunds */
+            admin_refunds: components["schemas"]["AdminRefundView"][];
+            /** Billing Address */
+            billing_address: {
+                [key: string]: unknown;
+            };
+            /** Can Cancel */
+            can_cancel: boolean;
+            /** Can Return */
+            can_return: boolean;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Currency */
+            currency: string;
+            /** Customer Note */
+            customer_note: string | null;
+            /** Discount Code */
+            discount_code: string | null;
+            /** Email */
+            email: string;
+            /** Events */
+            events: components["schemas"]["OrderEventView"][];
+            /** Fulfilment Status */
+            fulfilment_status: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Internal Note */
+            internal_note: string | null;
+            /** Lines */
+            lines: components["schemas"]["OrderLineView"][];
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Number */
+            number: string;
+            payment: components["schemas"]["PaymentSummaryView"] | null;
+            /** Payment Status */
+            payment_status: string;
+            /**
+             * Placed At
+             * Format: date-time
+             */
+            placed_at: string;
+            refundable: components["schemas"]["MoneyJson"];
+            /** Refunds */
+            refunds: components["schemas"]["RefundView"][];
+            /** Returns */
+            returns: components["schemas"]["ReturnView"][];
+            /** Shipments */
+            shipments: components["schemas"]["ShipmentView"][];
+            /** Shipping Address */
+            shipping_address: {
+                [key: string]: unknown;
+            };
+            /** Shipping Method */
+            shipping_method: string | null;
+            /** Status */
+            status: string;
+            totals: components["schemas"]["OrderTotalsView"];
+            /** User Id */
+            user_id: string | null;
+        };
         /** AdminProductRow */
         AdminProductRow: {
             /** Brand */
@@ -1203,6 +1905,40 @@ export interface components {
             updated_at: string;
             /** Variants */
             variants: components["schemas"]["AdminVariantView"][];
+        };
+        /** AdminRefundView */
+        AdminRefundView: {
+            /** Actor Id */
+            actor_id: string | null;
+            amount: components["schemas"]["MoneyJson"];
+            /** Attempts */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Error */
+            last_error: string | null;
+            /** Lines */
+            lines: {
+                [key: string]: unknown;
+            }[];
+            /** Note */
+            note: string | null;
+            /** Provider Refund Id */
+            provider_refund_id: string | null;
+            /** Reason */
+            reason: string;
+            /** Return Id */
+            return_id: string | null;
+            /** Status */
+            status: string;
         };
         /** AdminReviewView */
         AdminReviewView: {
@@ -1309,6 +2045,11 @@ export interface components {
              * Format: uuid
              */
             variant_id: string;
+        };
+        /** CancelOrder */
+        CancelOrder: {
+            /** Reason */
+            reason?: string | null;
         };
         /** CartItemView */
         CartItemView: {
@@ -1431,6 +2172,71 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** CheckoutLineView */
+        CheckoutLineView: {
+            /** Image Url */
+            image_url: string | null;
+            line_discount: components["schemas"]["MoneyJson"];
+            line_total: components["schemas"]["MoneyJson"];
+            /** Product Title */
+            product_title: string;
+            /** Quantity */
+            quantity: number;
+            /** Sku */
+            sku: string;
+            unit_price: components["schemas"]["MoneyJson"];
+            /**
+             * Variant Id
+             * Format: uuid
+             */
+            variant_id: string;
+            /** Variant Title */
+            variant_title: string;
+        };
+        /** CheckoutTotals */
+        CheckoutTotals: {
+            discount: components["schemas"]["MoneyJson"];
+            shipping: components["schemas"]["MoneyJson"] | null;
+            subtotal: components["schemas"]["MoneyJson"];
+            tax: components["schemas"]["MoneyJson"] | null;
+            tax_included: components["schemas"]["MoneyJson"] | null;
+            total: components["schemas"]["MoneyJson"];
+        };
+        /** CheckoutView */
+        CheckoutView: {
+            billing_address: components["schemas"]["AddressOut"] | null;
+            /** Currency */
+            currency: string;
+            /** Discounts */
+            discounts: components["schemas"]["AppliedDiscountView"][];
+            /** Email */
+            email: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Items */
+            items: components["schemas"]["CheckoutLineView"][];
+            /** Order Number */
+            order_number: string | null;
+            payment: components["schemas"]["PaymentStateView"] | null;
+            shipping_address: components["schemas"]["AddressOut"] | null;
+            shipping_method: components["schemas"]["ShippingMethodView"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "initiated" | "address_set" | "shipping_set" | "payment_pending" | "confirmed" | "failed" | "expired" | "abandoned";
+            totals: components["schemas"]["CheckoutTotals"];
+            /** Warnings */
+            warnings: components["schemas"]["CartWarning"][];
+        };
         /** CollectionCreate */
         CollectionCreate: {
             /** Description */
@@ -1479,10 +2285,60 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** CreateFulfilment */
+        CreateFulfilment: {
+            /** Carrier */
+            carrier?: string | null;
+            /** Lines */
+            lines?: components["schemas"]["ShipLineIn"][] | null;
+            /**
+             * Notify Customer
+             * @default true
+             */
+            notify_customer: boolean;
+            /** Tracking Number */
+            tracking_number?: string | null;
+            /** Tracking Url */
+            tracking_url?: string | null;
+        };
+        /**
+         * CreateRefund
+         * @description Lines and units — never an amount for them. The server prices each unit.
+         */
+        CreateRefund: {
+            /**
+             * Extra Amount
+             * @default 0
+             */
+            extra_amount: number;
+            /**
+             * Include Shipping
+             * @default false
+             */
+            include_shipping: boolean;
+            /**
+             * Lines
+             * @default []
+             */
+            lines: components["schemas"]["RefundLineIn"][];
+            /** Note */
+            note?: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "requested_by_customer" | "duplicate" | "fraudulent" | "defective" | "other";
+        };
         /** CsrfResponse */
         CsrfResponse: {
             /** Csrf Token */
             csrf_token: string;
+        };
+        /** CursorPage[AdminOrderSummaryView] */
+        CursorPage_AdminOrderSummaryView_: {
+            /** Data */
+            data: components["schemas"]["AdminOrderSummaryView"][];
+            pagination: components["schemas"]["PaginationInfo"];
         };
         /** CursorPage[AdminProductRow] */
         CursorPage_AdminProductRow_: {
@@ -1502,10 +2358,22 @@ export interface components {
             data: components["schemas"]["MovementView"][];
             pagination: components["schemas"]["PaginationInfo"];
         };
+        /** CursorPage[OrderSummaryView] */
+        CursorPage_OrderSummaryView_: {
+            /** Data */
+            data: components["schemas"]["OrderSummaryView"][];
+            pagination: components["schemas"]["PaginationInfo"];
+        };
         /** CursorPage[ProductCard] */
         CursorPage_ProductCard_: {
             /** Data */
             data: components["schemas"]["ProductCard"][];
+            pagination: components["schemas"]["PaginationInfo"];
+        };
+        /** CursorPage[ReturnView] */
+        CursorPage_ReturnView_: {
+            /** Data */
+            data: components["schemas"]["ReturnView"][];
             pagination: components["schemas"]["PaginationInfo"];
         };
         /** CursorPage[ReviewView] */
@@ -1534,6 +2402,16 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /** GuestLookup */
+        GuestLookup: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Number */
+            number: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1707,6 +2585,143 @@ export interface components {
             /** Values */
             values: components["schemas"]["OptionValueView"][];
         };
+        /** OrderEventView */
+        OrderEventView: {
+            /** Actor Id */
+            actor_id: string | null;
+            /** Actor Type */
+            actor_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event Type */
+            event_type: string;
+            /** From Status */
+            from_status: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** To Status */
+            to_status: string | null;
+        };
+        /** OrderLineView */
+        OrderLineView: {
+            discount: components["schemas"]["MoneyJson"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Image Url */
+            image_url: string | null;
+            /** Product Title */
+            product_title: string;
+            /** Quantity */
+            quantity: number;
+            /** Quantity Fulfilled */
+            quantity_fulfilled: number;
+            /** Quantity Refunded */
+            quantity_refunded: number;
+            /** Quantity Returned */
+            quantity_returned: number;
+            /** Returnable Quantity */
+            returnable_quantity: number;
+            /** Sku */
+            sku: string;
+            tax: components["schemas"]["MoneyJson"];
+            total: components["schemas"]["MoneyJson"];
+            unit_price: components["schemas"]["MoneyJson"];
+            /** Variant Id */
+            variant_id: string | null;
+            /** Variant Title */
+            variant_title: string;
+        };
+        /** OrderSummaryView */
+        OrderSummaryView: {
+            /** Fulfilment Status */
+            fulfilment_status: string;
+            /** Item Count */
+            item_count: number;
+            /** Number */
+            number: string;
+            /** Payment Status */
+            payment_status: string;
+            /**
+             * Placed At
+             * Format: date-time
+             */
+            placed_at: string;
+            /** Status */
+            status: string;
+            total: components["schemas"]["MoneyJson"];
+        };
+        /** OrderTotalsView */
+        OrderTotalsView: {
+            discount: components["schemas"]["MoneyJson"];
+            refunded: components["schemas"]["MoneyJson"];
+            shipping: components["schemas"]["MoneyJson"];
+            subtotal: components["schemas"]["MoneyJson"];
+            tax: components["schemas"]["MoneyJson"];
+            total: components["schemas"]["MoneyJson"];
+        };
+        /** OrderView */
+        OrderView: {
+            /** Access Token */
+            access_token?: string | null;
+            /** Billing Address */
+            billing_address: {
+                [key: string]: unknown;
+            };
+            /** Can Cancel */
+            can_cancel: boolean;
+            /** Can Return */
+            can_return: boolean;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Currency */
+            currency: string;
+            /** Discount Code */
+            discount_code: string | null;
+            /** Email */
+            email: string;
+            /** Fulfilment Status */
+            fulfilment_status: string;
+            /** Lines */
+            lines: components["schemas"]["OrderLineView"][];
+            /** Number */
+            number: string;
+            payment: components["schemas"]["PaymentSummaryView"] | null;
+            /** Payment Status */
+            payment_status: string;
+            /**
+             * Placed At
+             * Format: date-time
+             */
+            placed_at: string;
+            /** Refunds */
+            refunds: components["schemas"]["RefundView"][];
+            /** Returns */
+            returns: components["schemas"]["ReturnView"][];
+            /** Shipments */
+            shipments: components["schemas"]["ShipmentView"][];
+            /** Shipping Address */
+            shipping_address: {
+                [key: string]: unknown;
+            };
+            /** Shipping Method */
+            shipping_method: string | null;
+            /** Status */
+            status: string;
+            totals: components["schemas"]["OrderTotalsView"];
+        };
         /** PaginationInfo */
         PaginationInfo: {
             /** Has More */
@@ -1720,6 +2735,46 @@ export interface components {
              * @description Admin lists only.
              */
             total_count?: number | null;
+        };
+        /** PaymentIntentView */
+        PaymentIntentView: {
+            amount: components["schemas"]["MoneyJson"];
+            /** Client Secret */
+            client_secret: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Payment Id
+             * Format: uuid
+             */
+            payment_id: string;
+            /** Provider */
+            provider: string;
+            /** Publishable Key */
+            publishable_key: string;
+        };
+        /** PaymentStateView */
+        PaymentStateView: {
+            /** Failure Message */
+            failure_message: string | null;
+            /** Status */
+            status: string;
+        };
+        /** PaymentSummaryView */
+        PaymentSummaryView: {
+            captured: components["schemas"]["MoneyJson"];
+            /** Card Brand */
+            card_brand: string | null;
+            /** Card Last4 */
+            card_last4: string | null;
+            /** Method */
+            method: string | null;
+            /** Provider */
+            provider: string;
+            refunded: components["schemas"]["MoneyJson"];
         };
         /** PresignRequest */
         PresignRequest: {
@@ -1913,6 +2968,56 @@ export interface components {
              */
             status: "ready" | "degraded";
         };
+        /** ReceivedLineIn */
+        ReceivedLineIn: {
+            /**
+             * Condition
+             * @enum {string}
+             */
+            condition: "new" | "opened" | "damaged";
+            /**
+             * Order Item Id
+             * Format: uuid
+             */
+            order_item_id: string;
+            /** Restock */
+            restock: boolean;
+        };
+        /** RefundLineIn */
+        RefundLineIn: {
+            /**
+             * Order Item Id
+             * Format: uuid
+             */
+            order_item_id: string;
+            /** Quantity */
+            quantity: number;
+            /**
+             * Restock
+             * @default false
+             */
+            restock: boolean;
+        };
+        /** RefundView */
+        RefundView: {
+            amount: components["schemas"]["MoneyJson"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string;
+            /** Return Id */
+            return_id: string | null;
+            /** Status */
+            status: string;
+        };
         /** RegisterRequest */
         RegisterRequest: {
             /**
@@ -1943,12 +3048,76 @@ export interface components {
             /** Width */
             width: number;
         };
+        /** RequestReturn */
+        RequestReturn: {
+            /** Items */
+            items: components["schemas"]["ReturnLineIn"][];
+            /** Note */
+            note?: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "changed_mind" | "wrong_size" | "not_as_described" | "damaged" | "defective" | "wrong_item" | "other";
+        };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
             /** Password */
             password: string;
             /** Token */
             token: string;
+        };
+        /** ReturnLineIn */
+        ReturnLineIn: {
+            /**
+             * Order Item Id
+             * Format: uuid
+             */
+            order_item_id: string;
+            /** Quantity */
+            quantity: number;
+        };
+        /** ReturnLineView */
+        ReturnLineView: {
+            /** Condition */
+            condition: string | null;
+            /**
+             * Order Item Id
+             * Format: uuid
+             */
+            order_item_id: string;
+            /** Quantity */
+            quantity: number;
+            /** Restock */
+            restock: boolean;
+        };
+        /** ReturnView */
+        ReturnView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Customer Note */
+            customer_note: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lines */
+            lines: components["schemas"]["ReturnLineView"][];
+            /** Order Number */
+            order_number?: string | null;
+            /** Reason */
+            reason: string;
+            refund_amount: components["schemas"]["MoneyJson"] | null;
+            /** Rma Number */
+            rma_number: string;
+            /** Staff Note */
+            staff_note: string | null;
+            /** Status */
+            status: string;
         };
         /** ReviewCreate */
         ReviewCreate: {
@@ -1966,6 +3135,20 @@ export interface components {
              * @enum {string}
              */
             status: "approved" | "rejected";
+        };
+        /**
+         * ReviewSummary
+         * @description Approved reviews at a glance: the bars above the review list.
+         */
+        ReviewSummary: {
+            /** Average */
+            average: number;
+            /** Count */
+            count: number;
+            /** Distribution */
+            distribution: {
+                [key: string]: number;
+            };
         };
         /** ReviewView */
         ReviewView: {
@@ -1989,6 +3172,14 @@ export interface components {
             title: string | null;
             /** Verified Purchase */
             verified_purchase: boolean;
+        };
+        /** SaveProduct */
+        SaveProduct: {
+            /**
+             * Product Id
+             * Format: uuid
+             */
+            product_id: string;
         };
         /** SearchResults */
         SearchResults: {
@@ -2044,6 +3235,16 @@ export interface components {
             /** User Agent */
             user_agent: string | null;
         };
+        /** SetAddress */
+        SetAddress: {
+            billing_address?: components["schemas"]["AddressIn"] | null;
+            shipping_address: components["schemas"]["AddressIn"];
+        };
+        /** SetNote */
+        SetNote: {
+            /** Internal Note */
+            internal_note: string | null;
+        };
         /** SetQuantity */
         SetQuantity: {
             /**
@@ -2051,6 +3252,21 @@ export interface components {
              * @description 0 removes the line.
              */
             quantity: number;
+        };
+        /** SetShipping */
+        SetShipping: {
+            /** Shipping Rate Id */
+            shipping_rate_id?: string | null;
+        };
+        /** SetStatus */
+        SetStatus: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processing" | "delivered";
         };
         /** SettingsRequest */
         SettingsRequest: {
@@ -2061,12 +3277,61 @@ export interface components {
             /** Track Inventory */
             track_inventory?: boolean | null;
         };
+        /** ShipLineIn */
+        ShipLineIn: {
+            /**
+             * Order Item Id
+             * Format: uuid
+             */
+            order_item_id: string;
+            /** Quantity */
+            quantity: number;
+        };
+        /** ShipmentView */
+        ShipmentView: {
+            /** Carrier */
+            carrier: string | null;
+            /** Delivered At */
+            delivered_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lines */
+            lines: {
+                [key: string]: unknown;
+            }[];
+            /** Shipped At */
+            shipped_at: string | null;
+            /** Status */
+            status: string;
+            /** Tracking Number */
+            tracking_number: string | null;
+            /** Tracking Url */
+            tracking_url: string | null;
+        };
         /** ShippingEstimate */
         ShippingEstimate: {
             /** Options */
             options: components["schemas"]["ShippingOptionView"][];
             /** Selected Id */
             selected_id: string | null;
+        };
+        /** ShippingMethodView */
+        ShippingMethodView: {
+            /** Est Days Max */
+            est_days_max: number | null;
+            /** Est Days Min */
+            est_days_min: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            price: components["schemas"]["MoneyJson"];
         };
         /** ShippingOptionView */
         ShippingOptionView: {
@@ -2082,6 +3347,21 @@ export interface components {
             /** Name */
             name: string;
             price: components["schemas"]["MoneyJson"];
+        };
+        /** ShippingRatesView */
+        ShippingRatesView: {
+            /** Options */
+            options: components["schemas"]["ShippingMethodView"][];
+            /** Selected Id */
+            selected_id: string | null;
+        };
+        /**
+         * StartCheckout
+         * @description A guest gives an email here; a signed-in customer's account email is used.
+         */
+        StartCheckout: {
+            /** Email */
+            email?: string | null;
         };
         /** StockRowView */
         StockRowView: {
@@ -2154,6 +3434,32 @@ export interface components {
             tax: components["schemas"]["MoneyJson"] | null;
             tax_included: components["schemas"]["MoneyJson"] | null;
             total: components["schemas"]["MoneyJson"];
+        };
+        /** UpdateReturn */
+        UpdateReturn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "approve" | "reject" | "mark_in_transit" | "receive" | "refund" | "close";
+            /**
+             * Include Shipping
+             * @default false
+             */
+            include_shipping: boolean;
+            /** Lines */
+            lines?: components["schemas"]["ReceivedLineIn"][] | null;
+            /** Staff Note */
+            staff_note?: string | null;
+        };
+        /** UpdateShipment */
+        UpdateShipment: {
+            /** Carrier */
+            carrier?: string | null;
+            /** Status */
+            status?: ("in_transit" | "delivered" | "failed" | "cancelled") | null;
+            /** Tracking Number */
+            tracking_number?: string | null;
         };
         /** UserResponse */
         UserResponse: {
@@ -2458,6 +3764,86 @@ export interface operations {
             };
         };
     };
+    wishlist_api_v1_account_wishlist_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductCard"][];
+                };
+            };
+        };
+    };
+    save_product_api_v1_account_wishlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProduct"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsave_product_api_v1_account_wishlist__product_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_categories_api_v1_admin_categories_get: {
         parameters: {
             query?: never;
@@ -2679,6 +4065,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminCollectionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_fulfilment_api_v1_admin_fulfilments__fulfilment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fulfilment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateShipment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentView"];
                 };
             };
             /** @description Validation Error */
@@ -2915,6 +4336,311 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_orders_api_v1_admin_orders_get: {
+        parameters: {
+            query?: {
+                status?: ("pending" | "paid" | "processing" | "partially_fulfilled" | "fulfilled" | "delivered" | "cancelled" | "refunded" | "partially_refunded") | null;
+                payment_status?: ("paid" | "partially_refunded" | "refunded" | "pending" | "failed") | null;
+                fulfilment_status?: ("unfulfilled" | "partially_fulfilled" | "fulfilled" | "returned") | null;
+                /** @description Order number, customer email, or SKU. */
+                q?: string | null;
+                placed_from?: string | null;
+                placed_to?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_AdminOrderSummaryView_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_order_api_v1_admin_orders__order_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrderView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_v1_admin_orders__order_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrderView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fulfil_api_v1_admin_orders__order_id__fulfilments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFulfilment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipmentView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invoice_api_v1_admin_orders__order_id__invoice_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_note_api_v1_admin_orders__order_id__notes_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetNote"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrderView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    packing_slip_api_v1_admin_orders__order_id__packing_slip_get: {
+        parameters: {
+            query?: {
+                fulfilment_id?: string | null;
+            };
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refund_api_v1_admin_orders__order_id__refunds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRefund"];
+            };
+        };
+        responses: {
+            /** @description Requires `Idempotency-Key`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRefundView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_status_api_v1_admin_orders__order_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetStatus"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrderView"];
                 };
             };
             /** @description Validation Error */
@@ -3203,6 +4929,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminProductView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_returns_api_v1_admin_returns_get: {
+        parameters: {
+            query?: {
+                status?: ("requested" | "approved" | "rejected" | "in_transit" | "received" | "refunded" | "closed") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_ReturnView_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_return_api_v1_admin_returns__return_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                return_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_return_api_v1_admin_returns__return_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                return_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateReturn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnView"];
                 };
             };
             /** @description Validation Error */
@@ -4078,6 +5903,233 @@ export interface operations {
             };
         };
     };
+    start_checkout_api_v1_checkout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartCheckout"];
+            };
+        };
+        responses: {
+            /** @description Requires `Idempotency-Key`. A replay returns the stored response with `Idempotency-Replayed: true`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_checkout_api_v1_checkout__checkout_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abandon_api_v1_checkout__checkout_id__abandon_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_address_api_v1_checkout__checkout_id__address_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAddress"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    payment_intent_api_v1_checkout__checkout_id__payment_intent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Requires `Idempotency-Key`. A replay returns the stored response with `Idempotency-Replayed: true`. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentIntentView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_shipping_api_v1_checkout__checkout_id__shipping_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetShipping"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckoutView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    shipping_rates_api_v1_checkout__checkout_id__shipping_rates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                checkout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShippingRatesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_collections_api_v1_collections_get: {
         parameters: {
             query?: never;
@@ -4121,6 +6173,246 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CollectionPage"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_orders_api_v1_orders_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CursorPage_OrderSummaryView_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lookup_api_v1_orders_lookup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestLookup"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_order_api_v1_orders__number__get: {
+        parameters: {
+            query?: {
+                /** @description The signed link's token. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_order_api_v1_orders__number__cancel_post: {
+        parameters: {
+            query?: {
+                /** @description The signed link's token. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelOrder"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invoice_api_v1_orders__number__invoice_get: {
+        parameters: {
+            query?: {
+                /** @description The signed link's token. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_return_api_v1_orders__number__returns_post: {
+        parameters: {
+            query?: {
+                /** @description The signed link's token. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestReturn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    return_label_api_v1_orders__number__returns__rma__label_get: {
+        parameters: {
+            query?: {
+                /** @description The signed link's token. */
+                token?: string | null;
+            };
+            header?: never;
+            path: {
+                number: string;
+                rma: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4343,6 +6635,37 @@ export interface operations {
             };
         };
     };
+    review_summary_api_v1_products__slug__reviews_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_api_v1_search_get: {
         parameters: {
             query?: {
@@ -4439,6 +6762,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SystemInfoResponse"];
+                };
+            };
+        };
+    };
+    paystack_webhook_api_v1_webhooks_paystack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    stripe_webhook_api_v1_webhooks_stripe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    tracking_webhook_api_v1_webhooks_tracking_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
                 };
             };
         };

@@ -35,3 +35,45 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     return null;
   }
 });
+
+export type CategoryNode = Schema<"CategoryNode">;
+export type Collection = Schema<"CollectionView">;
+
+/**
+ * Catalog reads that do not depend on who is asking: no cookies, cached by
+ * Next for a minute. The API caches them too; this spares the round trip.
+ */
+export const publicClient = () => createApiClient();
+
+/** The category tree for navigation. Empty when the API is down: the header still renders. */
+export const getCategoryTree = cache(async (): Promise<CategoryNode[]> => {
+  try {
+    const { data } = await publicClient().GET("/api/v1/categories", {
+      next: { revalidate: 300 },
+    });
+    return data ?? [];
+  } catch {
+    return [];
+  }
+});
+
+export const getCollections = cache(async (): Promise<Collection[]> => {
+  try {
+    const { data } = await publicClient().GET("/api/v1/collections", {
+      next: { revalidate: 300 },
+    });
+    return data ?? [];
+  } catch {
+    return [];
+  }
+});
+
+/** Items in the visitor's cart, for the header badge. Zero when anything fails. */
+export const getCartCount = cache(async (): Promise<number> => {
+  try {
+    const { data } = await (await serverClient()).GET("/api/v1/cart", { cache: "no-store" });
+    return data?.item_count ?? 0;
+  } catch {
+    return 0;
+  }
+});

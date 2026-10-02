@@ -67,6 +67,34 @@ class Settings(BaseSettings):
     # A cart with items, untouched this long, is marked abandoned (for recovery email).
     cart_abandon_after_hours: int = Field(default=24, ge=1)
 
+    # ── Checkout & payments (Phase 8, ADR-006) ─────────────────────────────
+    # How long a checkout holds its stock (PAYMENTS-AND-CHECKOUT.md §2).
+    checkout_ttl_minutes: int = Field(default=30, ge=1, le=24 * 60)
+    stripe_secret_key: SecretStr = SecretStr("")
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: SecretStr = SecretStr("")
+    stripe_api_base: str = "https://api.stripe.com"
+    paystack_secret_key: SecretStr = SecretStr("")  # also signs Paystack's webhooks
+    paystack_public_key: str = ""
+    paystack_api_base: str = "https://api.paystack.co"
+    # Which provider takes a currency; anything unlisted goes to the default.
+    payment_default_provider: Literal["stripe", "paystack"] = "stripe"
+    payment_currency_providers: Annotated[dict[str, str], NoDecode] = Field(
+        default_factory=lambda: dict.fromkeys(("NGN", "GHS", "ZAR", "KES"), "paystack")
+    )
+    # Reconciliation asks the provider about payments unsettled for this long (§7).
+    payment_reconcile_after_minutes: int = Field(default=30, ge=1)
+
+    # ── Orders, fulfilment and returns (Phase 9) ───────────────────────────
+    store_name: str = "Velo"
+    # Printed on return labels; "|" separates lines in a .env.
+    return_address: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["Velo Returns", "1 Warehouse Way", "San Francisco, CA 94103", "US"]
+    )
+    return_window_days: int = Field(default=30, ge=0)
+    # Signs carrier tracking webhooks (HMAC-SHA256 of the raw body). Empty: endpoint off.
+    tracking_webhook_secret: SecretStr = SecretStr("")
+
     # ── Media storage (S3 or R2; MinIO in development) ─────────────────────
     s3_endpoint_url: str | None = None  # None = AWS; set for R2 or MinIO
     s3_region: str = "auto"
@@ -113,6 +141,30 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("return_address", mode="before")
+    @classmethod
+    def _split_return_address(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [line.strip() for line in value.split("|") if line.strip()]
+        return value
+
+    @field_validator("payment_currency_providers", mode="before")
+    @classmethod
+    def _split_currency_providers(cls, value: object) -> object:
+        """``NGN:paystack,GHS:paystack`` — the shape a .env can hold."""
+        if isinstance(value, str):
+            pairs = [item.split(":", 1) for item in value.split(",") if item.strip()]
+            return {code.strip().upper(): name.strip().lower() for code, name in pairs}
+        return value
+
+    @field_validator("payment_currency_providers")
+    @classmethod
+    def _known_providers(cls, value: dict[str, str]) -> dict[str, str]:
+        unknown = {name for name in value.values() if name not in ("stripe", "paystack")}
+        if unknown:
+            raise ValueError(f"unknown payment provider(s): {', '.join(sorted(unknown))}")
+        return value
+
     @field_validator("database_url")
     @classmethod
     def _require_async_driver(cls, value: str) -> str:
@@ -135,6 +187,11 @@ class Settings(BaseSettings):
             raise ValueError("cookie_secure must be true in production.")
         if len(self.secret_key.get_secret_value()) < 32:
             raise ValueError("secret_key must be at least 32 characters in production.")
+        if self.stripe_secret_key.get_secret_value() and not (
+            self.stripe_webhook_secret.get_secret_value()
+        ):
+            # Without it every webhook is refused, and no order is ever created.
+            raise ValueError("stripe_webhook_secret is required when Stripe is configured.")
         return self
 
     @property

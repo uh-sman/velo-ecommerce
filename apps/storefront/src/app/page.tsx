@@ -1,78 +1,143 @@
-import { createApiClient, type Schema } from "@velo/api-client";
+import { RotateCcwIcon, ShieldCheckIcon, TruckIcon } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
 
-/**
- * The walking skeleton (PLANNING.md Phase 3, M1).
- *
- * A Server Component reads a value the API read from Postgres, and renders it.
- * Trivial in content; it proves every link in the chain — browser, Next.js
- * server, API, database, and the generated client's types — before a single
- * feature depends on them.
+import { ProductGrid } from "@/components/commerce/product-card";
+import { Button } from "@/components/ui/button";
+import { getCollections } from "@/lib/api-server";
+import { collectionProducts, newArrivals } from "@/lib/catalog-server";
+
+export const metadata: Metadata = {
+  title: { absolute: "Velo — considered goods, honestly priced" },
+  description: "New arrivals, collections, free shipping over $75 and 30-day returns.",
+};
+
+// Rebuilt at most once a minute; the catalog reads underneath are cached too.
+export const revalidate = 60;
+
+/*
+ * PAGE-SPECS.md §1.1. Server-rendered from top to bottom: the first paint is
+ * the content, not a skeleton. Every section degrades to nothing rather than
+ * to an error when the catalog cannot be read — the page still sells.
  */
-
-async function getSystemInfo(): Promise<Schema<"SystemInfoResponse"> | null> {
-  try {
-    const { data } = await createApiClient().GET("/api/v1/system/info", {
-      // Never cached: this page exists to report the live state of the stack.
-      cache: "no-store",
-    });
-    return data ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function HomePage() {
-  const info = await getSystemInfo();
+  const [arrivals, collections] = await Promise.all([newArrivals(8), getCollections()]);
+  const featured = collections.slice(0, 2);
+  const featuredProducts = await Promise.all(featured.map((c) => collectionProducts(c.slug, 4)));
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-4 py-16">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight">Velo Commerce</h1>
-        <p className="text-text-secondary mt-2">
-          Walking skeleton. Accounts work: sign in, create an account, and manage your details,
-          addresses, and sessions.
-        </p>
-      </header>
-
+    <div className="flex flex-col gap-16 pb-8">
       <section
-        aria-labelledby="stack-heading"
-        className="border-border-subtle bg-surface-raised rounded-lg border p-6 shadow-sm"
+        aria-labelledby="hero-heading"
+        className="bg-surface-sunken border-border-subtle border-b"
       >
-        <h2 id="stack-heading" className="text-lg font-medium">
-          Stack status
-        </h2>
-
-        {info ? (
-          <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
-            <dt className="text-text-secondary">API version</dt>
-            <dd className="tabular">{info.api_version}</dd>
-
-            <dt className="text-text-secondary">Environment</dt>
-            <dd>{info.environment}</dd>
-
-            <dt className="text-text-secondary">Database</dt>
-            <dd>{info.database_version}</dd>
-
-            <dt className="text-text-secondary">Database time (UTC)</dt>
-            <dd className="tabular">{info.database_time}</dd>
-          </dl>
-        ) : (
-          /* An error state, not a blank panel — the rule applies to the
-             skeleton as much as to the storefront (DESIGN-SYSTEM.md §4). */
-          <div className="border-border-default bg-surface-sunken mt-4 rounded-md border p-4">
-            <p className="font-medium">The API is not answering.</p>
-            <p className="text-text-secondary mt-1 text-sm">
-              Start the containers with <code className="font-mono">pnpm infra:up</code>, then the
-              API with <code className="font-mono">uv run uvicorn velo.main:app --reload</code> in{" "}
-              <code className="font-mono">apps/api</code>.
-            </p>
+        <div className="mx-auto flex max-w-7xl flex-col items-start gap-6 px-4 py-20 sm:py-28">
+          <p className="text-text-secondary text-sm font-medium uppercase tracking-wide">
+            New season
+          </p>
+          <h1
+            id="hero-heading"
+            className="max-w-3xl text-balance text-4xl font-semibold tracking-tight"
+          >
+            Considered goods, honestly priced.
+          </h1>
+          <p className="text-text-secondary max-w-xl text-lg">
+            Every price you see is the price you pay. Free shipping over $75, and 30 days to change
+            your mind.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild size="lg">
+              <Link href="/products">Shop new arrivals</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/collections">Browse collections</Link>
+            </Button>
           </div>
-        )}
+        </div>
       </section>
 
-      <footer className="text-text-tertiary text-sm">
-        Next: Phase 6 — catalog and search. See <code className="font-mono">PLANNING.md</code>.
-      </footer>
+      {arrivals.length > 0 && (
+        <section aria-labelledby="arrivals-heading" className="mx-auto w-full max-w-7xl px-4">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <h2 id="arrivals-heading" className="text-2xl font-semibold tracking-tight">
+              New arrivals
+            </h2>
+            <Link href="/products" className="text-sm underline underline-offset-4">
+              See everything
+            </Link>
+          </div>
+          <ProductGrid cards={arrivals} />
+        </section>
+      )}
+
+      {featured.map((collection, index) =>
+        (featuredProducts[index]?.length ?? 0) > 0 ? (
+          <section
+            key={collection.id}
+            aria-labelledby={`collection-${collection.slug}`}
+            className="mx-auto w-full max-w-7xl px-4"
+          >
+            <div className="mb-6 flex items-end justify-between gap-4">
+              <div>
+                <h2
+                  id={`collection-${collection.slug}`}
+                  className="text-2xl font-semibold tracking-tight"
+                >
+                  {collection.title}
+                </h2>
+                {collection.description && (
+                  <p className="text-text-secondary mt-1 max-w-2xl">{collection.description}</p>
+                )}
+              </div>
+              <Link
+                href={`/collections/${collection.slug}`}
+                className="shrink-0 text-sm underline underline-offset-4"
+              >
+                Shop the collection
+              </Link>
+            </div>
+            <ProductGrid cards={featuredProducts[index] ?? []} />
+          </section>
+        ) : null,
+      )}
+
+      <section aria-labelledby="promise-heading" className="mx-auto w-full max-w-7xl px-4">
+        <h2 id="promise-heading" className="sr-only">
+          Our promise
+        </h2>
+        <ul className="grid gap-6 sm:grid-cols-3">
+          <Pledge
+            icon={<TruckIcon className="size-6" aria-hidden />}
+            title="Free shipping over $75"
+          >
+            Tracked delivery, with a link the moment it ships.
+          </Pledge>
+          <Pledge icon={<RotateCcwIcon className="size-6" aria-hidden />} title="30-day returns">
+            Print a label from your order page. Refunds as soon as it arrives.
+          </Pledge>
+          <Pledge icon={<ShieldCheckIcon className="size-6" aria-hidden />} title="Secure checkout">
+            Card details go straight to our payment provider — never to our servers.
+          </Pledge>
+        </ul>
+      </section>
     </div>
+  );
+}
+
+function Pledge({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="border-border-subtle flex flex-col gap-2 rounded-lg border p-6">
+      {icon}
+      <h3 className="font-semibold">{title}</h3>
+      <p className="text-text-secondary text-sm">{children}</p>
+    </li>
   );
 }

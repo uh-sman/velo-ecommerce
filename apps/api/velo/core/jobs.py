@@ -18,6 +18,7 @@ from velo.core.logging import get_logger
 logger = get_logger(__name__)
 
 RELAY_JOB = "relay_outbox"
+PROCESS_PAYMENT_EVENT_JOB = "process_payment_event"
 
 
 def redis_settings(settings: Settings) -> RedisSettings:

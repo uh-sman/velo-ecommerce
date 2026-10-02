@@ -154,6 +154,7 @@ class OrderItem(HasId, HasCreatedAt, Base):
             "quantity_returned <= quantity_fulfilled", name="returned_within_fulfilled"
         ),
         Index("idx_order_items_order", "order_id"),
+        Index("idx_order_items_sku", "sku"),  # order search by SKU
     )
 
 
@@ -187,7 +188,12 @@ class Fulfilment(HasId, HasCreatedAt, Base):
     shipped_at: Mapped[datetime | None]
     delivered_at: Mapped[datetime | None]
 
-    __table_args__ = (one_of("status", *SHIPMENT_STATUSES),)
+    __table_args__ = (
+        one_of("status", *SHIPMENT_STATUSES),
+        Index("idx_fulfilments_order", "order_id"),
+        # Carrier tracking webhooks find the shipment by its number.
+        Index("idx_fulfilments_tracking", "tracking_number"),
+    )
 
 
 class FulfilmentItem(Base):
@@ -218,6 +224,8 @@ class Return(HasId, HasTimestamps, Base):
     __table_args__ = (
         one_of("status", *RETURN_STATUSES),
         CheckConstraint("refund_amount >= 0", name="refund_amount_non_negative"),
+        Index("idx_returns_order", "order_id"),
+        Index("idx_returns_status", "status", "created_at"),
     )
 
 

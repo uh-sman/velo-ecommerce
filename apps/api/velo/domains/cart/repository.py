@@ -1,16 +1,24 @@
-"""Cart data access. Queries in, frozen records out — no rules, no HTTP."""
+"""Cart data access. Queries in, frozen records out — no rules, no HTTP.
+
+``checkout_sessions`` is named as a bare table clause, read-only: a cart a
+checkout was made from is kept, because the session (and its order) refer to
+it (ARCHITECTURE.md §3, rule 5).
+"""
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import column, delete, func, select, table, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from velo.domains.cart.models import Cart, CartItem
+
+_checkouts = table("checkout_sessions", column("cart_id"))
 
 LIVE_STATUSES = ("active", "abandoned")  # a cart its owner can still use
 
@@ -178,6 +186,19 @@ class CartRepository:
     async def clear(self, cart_id: uuid.UUID) -> None:
         await self._session.execute(delete(CartItem).where(CartItem.cart_id == cart_id))
 
+    async def reduce(self, cart_id: uuid.UUID, quantities: Mapping[uuid.UUID, int]) -> None:
+        """Take these quantities off the cart's lines; a line reduced to nothing goes."""
+        for variant_id, quantity in quantities.items():
+            where = (CartItem.cart_id == cart_id, CartItem.variant_id == variant_id)
+            await self._session.execute(
+                delete(CartItem).where(*where, CartItem.quantity <= quantity)
+            )
+            await self._session.execute(
+                update(CartItem)
+                .where(*where)
+                .values(quantity=CartItem.quantity - quantity, updated_at=func.now())
+            )
+
     # ── Housekeeping ──────────────────────────────────────────────────────
 
     async def mark_abandoned(self, idle_since: datetime) -> int:
@@ -191,8 +212,12 @@ class CartRepository:
         return int(result.rowcount or 0)  # type: ignore[attr-defined]
 
     async def delete_expired_guest_carts(self) -> int:
-        """Guest carts past their expiry. A user's cart is kept with the account."""
+        """Guest carts past their expiry, unless a checkout was made from them.
+
+        A user's cart is kept with the account.
+        """
+        checked_out = select(_checkouts.c.cart_id).where(_checkouts.c.cart_id == Cart.id).exists()
         result = await self._session.execute(
-            delete(Cart).where(Cart.user_id.is_(None), Cart.expires_at < func.now())
+            delete(Cart).where(Cart.user_id.is_(None), Cart.expires_at < func.now(), ~checked_out)
         )
         return int(result.rowcount or 0)  # type: ignore[attr-defined]

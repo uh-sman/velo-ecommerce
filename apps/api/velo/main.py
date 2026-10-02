@@ -16,7 +16,7 @@ import velo.db.models  # noqa: F401 — register every mapper; FKs cross domains
 from velo import __version__
 from velo.api import health
 from velo.api.csrf import CsrfMiddleware
-from velo.api.deps import close_meili
+from velo.api.deps import close_meili, close_payment_providers
 from velo.api.v1.router import api_router
 from velo.core.config import Settings, get_settings
 from velo.core.errors import register_exception_handlers
@@ -52,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await close_meili()
+            await close_payment_providers()
             await close_jobs()
             await close_redis()
             await dispose_engine()

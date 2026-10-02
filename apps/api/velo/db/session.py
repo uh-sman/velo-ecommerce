@@ -81,3 +81,17 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
         raise RuntimeError("Sessionmaker not initialised. Call init_engine() first.")
     async with _sessionmaker() as session, session.begin():
         yield session
+
+
+@asynccontextmanager
+async def open_session() -> AsyncIterator[AsyncSession]:
+    """A session whose user owns its transactions, outside a request.
+
+    For background work that commits several times in one run — one payment
+    or one checkout per transaction, so locks stay short. Anything left
+    uncommitted is rolled back on close.
+    """
+    if _sessionmaker is None:
+        raise RuntimeError("Sessionmaker not initialised. Call init_engine() first.")
+    async with _sessionmaker() as session:
+        yield session

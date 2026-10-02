@@ -9,7 +9,7 @@ from sqlalchemy import CHAR, CheckConstraint, ForeignKey, Index, text
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
-from velo.db.base import Base, HasId, HasTimestamps, non_negative, one_of
+from velo.db.base import Base, HasId, HasTimestamps, JsonObject, json_object, non_negative, one_of
 from velo.db.types import MinorUnits
 
 CHECKOUT_STATUSES = (
@@ -43,6 +43,9 @@ class CheckoutSession(HasId, HasTimestamps, Base):
     shipping_amount: Mapped[int] = mapped_column(MinorUnits, server_default=text("0"))
     tax_amount: Mapped[int] = mapped_column(MinorUnits, server_default=text("0"))
     total_amount: Mapped[int] = mapped_column(MinorUnits, server_default=text("0"))
+    # What the totals were computed from: priced lines, discounts, tax lines, the
+    # shipping choice. Order line items are copied from it (checkout/service.py).
+    snapshot: Mapped[JsonObject] = json_object()
 
     expires_at: Mapped[datetime] = mapped_column(
         server_default=text("now() + interval '30 minutes'")
@@ -58,6 +61,7 @@ class CheckoutSession(HasId, HasTimestamps, Base):
             name="totals_balance",
         ),
         CheckConstraint("discount_amount <= subtotal_amount", name="discount_within_subtotal"),
+        Index("idx_checkout_cart", "cart_id"),
         Index(
             "idx_checkout_expiry",
             "expires_at",
