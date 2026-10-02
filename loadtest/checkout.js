@@ -6,7 +6,9 @@
 // (STOCK units for VUS shoppers): the run proves the oversell guard holds under
 // load, not just that a quiet store can sell.
 //
-//   pnpm loadtest            (docker; API on :8000 with VELO_PAYMENT_SANDBOX=true)
+//   docker run --rm -v ./loadtest:/scripts -e API_URL=... grafana/k6 run /scripts/checkout.js
+//   The API needs VELO_PAYMENT_SANDBOX=true, VELO_PAYMENT_DEFAULT_PROVIDER=sandbox and
+//   VELO_TRUST_FORWARDED_FOR=true (.github/workflows/load.yml runs it all).
 //
 // Pass/fail is the thresholds block: p95 latency per step, and the number of
 // checkouts that reserved stock never exceeding the stock there was.
@@ -21,6 +23,9 @@ const VUS = Number(__ENV.VUS || 500);
 const STOCK = Number(__ENV.STOCK || 200);
 const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || "admin@velo.dev";
 const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || "ChangeMe123!";
+
+// Sold out is an answer, not a failure: 409 does not count towards http_req_failed.
+http.setResponseCallback(http.expectedStatuses({ min: 200, max: 299 }, 409));
 
 const reserved = new Counter("checkouts_reserved");
 const outOfStock = new Counter("checkouts_out_of_stock");
@@ -64,10 +69,21 @@ function csrf(jar) {
   return (cookies.velo_csrf || [""])[0];
 }
 
+// Each shopper is its own client, as behind a load balancer: per-IP rate limits
+// apply per shopper, not to the whole run (the API needs VELO_TRUST_FORWARDED_FOR).
+function shopperIp() {
+  const id = exec.vu.idInTest || 0;
+  return `10.${(id >> 16) & 255}.${(id >> 8) & 255}.${id & 255}`;
+}
+
 function send(method, path, body, extraHeaders) {
   const jar = http.cookieJar();
   const headers = Object.assign(
-    { "Content-Type": "application/json", "X-CSRF-Token": csrf(jar) },
+    {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrf(jar),
+      "X-Forwarded-For": shopperIp(),
+    },
     extraHeaders || {},
   );
   return http.request(method, `${API}${path}`, body ? JSON.stringify(body) : null, { headers });
@@ -83,7 +99,7 @@ function uuid() {
 // ── Setup: an admin makes the scarce product ──────────────────────────────────
 
 export function setup() {
-  http.get(`${API}/api/v1/system/health`); // first contact hands out the CSRF cookie
+  http.get(`${API}/api/v1/auth/csrf`); // hands out the CSRF cookie; no database
   const login = send("POST", "/api/v1/auth/login", {
     email: ADMIN_EMAIL,
     password: ADMIN_PASSWORD,
@@ -102,9 +118,13 @@ export function setup() {
 // ── Each shopper ──────────────────────────────────────────────────────────────
 
 export default function (data) {
-  http.get(`${API}/api/v1/system/health`);
+  http.get(`${API}/api/v1/auth/csrf`);
 
   const added = send("POST", "/api/v1/cart/items", { variant_id: data.variantId, quantity: 1 });
+  if (added.status === 409) {
+    outOfStock.add(1); // sold out before this shopper reached the cart: expected
+    return;
+  }
   if (!check(added, { "added to cart": (r) => r.status === 200 })) {
     unexpected.add(1);
     return;
@@ -113,7 +133,7 @@ export default function (data) {
   const started = send(
     "POST",
     "/api/v1/checkout",
-    { email: `shopper${exec.vu.idInTest}@load.test` },
+    { email: `shopper${exec.vu.idInTest}@example.com` },
     { "Idempotency-Key": uuid() },
   );
   checkoutStart.add(started.timings.duration);
@@ -131,7 +151,9 @@ export default function (data) {
   const addressed = send("PATCH", `/api/v1/checkout/${checkoutId}/address`, {
     shipping_address: ADDRESS,
   });
-  const rates = http.get(`${API}/api/v1/checkout/${checkoutId}/shipping-rates`);
+  const rates = http.get(`${API}/api/v1/checkout/${checkoutId}/shipping-rates`, {
+    headers: { "X-Forwarded-For": shopperIp() },
+  });
   const shipped = send("PATCH", `/api/v1/checkout/${checkoutId}/shipping`, {
     shipping_rate_id: rates.json("options.0.id"),
   });
@@ -164,10 +186,10 @@ export default function (data) {
 // ── Teardown: the stock never went negative ───────────────────────────────────
 
 export function teardown(data) {
-  http.get(`${API}/api/v1/system/health`);
+  http.get(`${API}/api/v1/auth/csrf`);
   send("POST", "/api/v1/auth/login", { email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
   const stock = http.get(`${API}/api/v1/admin/inventory?q=${encodeURIComponent(data.sku)}`);
-  const row = stock.json("items.0");
+  const row = stock.json("data.0");
   check(row, {
     "stock never negative": (r) => r && r.stock.quantity_on_hand >= 0 && r.stock.available >= 0,
   });

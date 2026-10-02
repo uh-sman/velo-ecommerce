@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from velo.core.logging import get_logger, get_request_id
@@ -198,6 +199,35 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
     return _problem_response(problem)
 
 
+def _sqlstate(exc: BaseException) -> str:
+    """The Postgres SQLSTATE behind a SQLAlchemy error, or ""."""
+    original = getattr(exc, "orig", None)
+    return str(getattr(original, "sqlstate", None) or getattr(original, "pgcode", None) or "")
+
+
+async def database_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """A value Postgres cannot store is the request's fault: 422, not 500.
+
+    SQLSTATE class 22 is "data exception": a NUL character in text, a number
+    out of range, an impossible date. Validation should catch these first;
+    this is the net under it, so a fuzzed or hostile value never reads as a
+    server fault. Every other database error is still a 500.
+    """
+    assert isinstance(exc, DBAPIError)
+    if not _sqlstate(exc).startswith("22"):
+        return await unhandled_exception_handler(request, exc)
+    logger.info("unstorable_value", path=request.url.path, sqlstate=_sqlstate(exc))
+    problem = ProblemDetail(
+        type=f"{ERROR_TYPE_BASE}/validation-failed",
+        title="Validation failed",
+        status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail="A value in the request cannot be stored (for example, a NUL character).",
+        instance=request.url.path,
+        request_id=get_request_id(),
+    )
+    return _problem_response(problem)
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """500 — logged with the traceback, returned without one.
 
@@ -236,6 +266,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         DomainError: domain_error_handler,
         StarletteHTTPException: http_exception_handler,
         RequestValidationError: validation_exception_handler,
+        DBAPIError: database_error_handler,
         Exception: unhandled_exception_handler,
     }
     for exc_class, handler in handlers.items():

@@ -17,6 +17,7 @@
     "lint": "pnpm --recursive lint",
     "typecheck": "pnpm --recursive typecheck",
     "test": "pnpm --recursive test",
+    "test:coverage": "pnpm --filter \"./apps/*\" test:coverage",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,css,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,css,md,yml,yaml}\"",
     "generate:api": "pnpm --filter @velo/api-client generate",
@@ -29,9 +30,14 @@
     "search:reindex": "cd apps/api && uv run python -m velo.scripts.reindex",
     "search:check": "cd apps/api && uv run python -m velo.scripts.reindex --check",
     "storage:init": "cd apps/api && uv run python -m velo.scripts.storage_init",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:install": "playwright install --with-deps chromium firefox webkit",
     "db:reset": "cd apps/api && uv run alembic downgrade base && uv run alembic upgrade head && uv run python -m velo.scripts.seed"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.4",
     "@velo/config": "workspace:*",
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.8",

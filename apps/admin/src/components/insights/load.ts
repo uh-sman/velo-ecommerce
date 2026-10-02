@@ -15,11 +15,12 @@ export type Loaded<T> = { ok: true; data: T } | { ok: false; status: number };
 type Client = Awaited<ReturnType<typeof serverClient>>;
 
 async function load<T>(
-  call: (client: Client) => Promise<{ data?: T | undefined; response: Response }>,
+  call: (client: Client) => Promise<{ data?: T | string | undefined; response: Response }>,
 ): Promise<Loaded<T>> {
   try {
     const { data, response } = await call(await serverClient());
-    if (response.ok && data !== undefined) return { ok: true, data };
+    // Endpoints that can also answer CSV are typed `T | string`; these calls ask for JSON.
+    if (response.ok && data !== undefined && typeof data !== "string") return { ok: true, data };
     return { ok: false, status: response.status };
   } catch {
     return { ok: false, status: 0 };

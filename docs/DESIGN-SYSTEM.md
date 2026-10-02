@@ -54,11 +54,12 @@ Semantic names, not literal ones. `--color-danger`, never `--color-red` — the 
   --color-neutral-950: #020617;
 
   /* Semantic */
-  --color-success: #059669;
-  --color-warning: #d97706;
-  --color-danger: #dc2626;
-  --color-info: #0284c7;
-  --color-sale: #dc2626; /* sale pricing — deliberately the danger red */
+  /* 700 shades (warning 800): 4.5:1 as text on white and on their 10% tint (dark: the 600s) */
+  --color-success: #047857;
+  --color-warning: #92400e;
+  --color-danger: #b91c1c;
+  --color-info: #0369a1;
+  --color-sale: #b91c1c; /* sale pricing — deliberately the danger red */
 
   /* Surfaces — what components actually reference */
   --surface-page: var(--color-neutral-0);

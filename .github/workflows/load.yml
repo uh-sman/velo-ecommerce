@@ -1,0 +1,78 @@
+name: Load test
+
+# 500 shoppers checking out at once against short stock (loadtest/checkout.js).
+# Too heavy for every pull request: run it before a release, or after a change
+# to checkout, inventory or payments.
+on:
+  workflow_dispatch:
+    inputs:
+      vus:
+        description: Concurrent shoppers
+        default: "500"
+      stock:
+        description: Units of the scarce product
+        default: "200"
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  checkout-rush:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      VELO_ENV: development
+      VELO_SECRET_KEY: load-test-secret-key-that-is-long-enough
+      VELO_DATABASE_URL: postgresql+asyncpg://velo:velo@127.0.0.1:5432/velo
+      VELO_REDIS_URL: redis://127.0.0.1:6379/0
+      VELO_MEILISEARCH_URL: http://127.0.0.1:7700
+      VELO_MEILISEARCH_MASTER_KEY: local-dev-master-key
+      VELO_COOKIE_SECURE: "false"
+      VELO_PAYMENT_SANDBOX: "true"
+      VELO_PAYMENT_DEFAULT_PROVIDER: sandbox
+      VELO_TRUST_FORWARDED_FOR: "true" # each k6 shopper sends its own address
+      # 4 API workers x (10 + 5) stays under Postgres's default 100 connections.
+      VELO_DATABASE_POOL_SIZE: "10"
+      VELO_DATABASE_MAX_OVERFLOW: "5"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Postgres, Redis and Meilisearch
+        working-directory: .
+        run: docker compose -f docker/docker-compose.dev.yml up -d --wait postgres redis meilisearch
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+
+      - name: Migrate and seed
+        run: uv run alembic upgrade head && uv run python -m velo.scripts.seed
+
+      - name: Start the API (4 workers) and the job worker
+        run: |
+          nohup uv run uvicorn velo.main:app --port 8000 --workers 4 > api.log 2>&1 &
+          nohup uv run arq velo.worker.WorkerSettings > worker.log 2>&1 &
+          for i in $(seq 60); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+
+      - name: k6
+        working-directory: .
+        run: |
+          docker run --rm --network host -v "$PWD/loadtest:/scripts" \
+            -e API_URL=http://127.0.0.1:8000 \
+            -e VUS=${{ inputs.vus }} -e STOCK=${{ inputs.stock }} \
+            grafana/k6:latest run --summary-export=/scripts/summary.json /scripts/checkout.js
+
+      - name: Keep the logs and the summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test
+          path: |
+            apps/api/api.log
+            apps/api/worker.log
+            loadtest/summary.json

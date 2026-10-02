@@ -36,11 +36,15 @@
   --color-neutral-950: #020617;
 
   /* ── Semantic status ───────────────────────────────────────────────── */
-  --color-success: #059669;
-  --color-warning: #d97706;
-  --color-danger: #dc2626;
-  --color-info: #0284c7;
-  --color-sale: #dc2626;
+  /* The 700 shades: status colours are used as text, on white and on their
+     own 10% tint, and need 4.5:1 there (WCAG 1.4.3 — axe in the E2E suite;
+     warning takes the 800: amber-700 misses on its tint).
+     Dark mode keeps the brighter 600 shades; see below. */
+  --color-success: #047857;
+  --color-warning: #92400e;
+  --color-danger: #b91c1c;
+  --color-info: #0369a1;
+  --color-sale: #b91c1c;
 
   /* ── Type ──────────────────────────────────────────────────────────── */
   /* --font-inter / --font-jetbrains-mono are set on <html> by each app's
@@ -144,6 +148,12 @@
       --brand-500: #60a5fa;
       --brand-600: #3b82f6;
       --border-focus: #60a5fa;
+
+      --color-success: #059669;
+      --color-warning: #d97706;
+      --color-danger: #dc2626;
+      --color-info: #0284c7;
+      --color-sale: #dc2626;
     }
   }
 
@@ -165,6 +175,12 @@
     --brand-500: #60a5fa;
     --brand-600: #3b82f6;
     --border-focus: #60a5fa;
+
+    --color-success: #059669;
+    --color-warning: #d97706;
+    --color-danger: #dc2626;
+    --color-info: #0284c7;
+    --color-sale: #dc2626;
   }
 
   html {

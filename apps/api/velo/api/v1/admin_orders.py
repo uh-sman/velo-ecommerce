@@ -33,6 +33,7 @@ from velo.api.deps import (
     SettingsDep,
 )
 from velo.api.idempotency import run_idempotent, stored_response
+from velo.api.openapi import PDF
 from velo.core.errors import ForbiddenError, ValidationError
 from velo.core.pagination import CursorPage, PaginationInfo, decode_cursor, encode_cursor
 from velo.domains.identity.permissions import Permission, has_permission
@@ -232,7 +233,9 @@ async def refund(
     return stored_response(stored)
 
 
-@router.get("/orders/{order_id}/invoice", summary="Invoice (PDF)", response_class=Response)
+@router.get(
+    "/orders/{order_id}/invoice", summary="Invoice (PDF)", response_class=Response, responses=PDF
+)
 async def invoice(
     order_id: uuid.UUID, _: OrdersReaderDep, reader: OrderReaderDep, settings: SettingsDep
 ) -> Response:

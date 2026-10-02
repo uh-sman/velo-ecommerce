@@ -15,6 +15,15 @@ import { forgetCheckout } from "@/lib/checkout-session";
 type Checkout = Schema<"CheckoutView">;
 type Phase = "loading" | "confirming" | "slow" | "confirmed" | "failed" | "missing";
 
+/**
+ * A failed payment is believed only once it has stayed failed this long. A
+ * customer whose first card was declined and whose second succeeded lands
+ * here before the worker has processed the success: for a few seconds the
+ * server still shows the earlier decline, and that customer must not be told
+ * their payment failed.
+ */
+export const FAILURE_GRACE_MS = 10_000;
+
 /** PAGE-SPECS.md §1.4: every 2 s for 30 s, then every 5 s to 3 minutes. */
 export function pollDelay(elapsedMs: number): number | null {
   if (elapsedMs < 30_000) return 2_000;
@@ -68,7 +77,7 @@ export function Confirmation({
           setPhase("confirmed");
           return;
         }
-        if (outcome.data.payment?.status === "failed") {
+        if (outcome.data.payment?.status === "failed" && Date.now() - started >= FAILURE_GRACE_MS) {
           setPhase("failed");
           return;
         }

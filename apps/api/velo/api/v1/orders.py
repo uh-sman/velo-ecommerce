@@ -22,6 +22,7 @@ from velo.api.deps import (
     SettingsDep,
     get_rate_limiter,
 )
+from velo.api.openapi import PDF
 from velo.core import rate_limit
 from velo.core.errors import NotFoundError, RateLimitedError
 from velo.core.pagination import CursorPage, PaginationInfo, decode_cursor, encode_cursor
@@ -142,7 +143,7 @@ async def cancel_order(
     return await reader.view(await reader.by_id(order.id), with_token=True)
 
 
-@router.get("/{number}/invoice", summary="Invoice (PDF)", response_class=Response)
+@router.get("/{number}/invoice", summary="Invoice (PDF)", response_class=Response, responses=PDF)
 async def invoice(
     number: str,
     principal: OptionalPrincipalDep,
@@ -189,7 +190,12 @@ async def request_return(
     return return_view(created, order.currency, order.order_number)
 
 
-@router.get("/{number}/returns/{rma}/label", summary="Return label (PDF)", response_class=Response)
+@router.get(
+    "/{number}/returns/{rma}/label",
+    summary="Return label (PDF)",
+    response_class=Response,
+    responses=PDF,
+)
 async def return_label(
     number: str,
     rma: str,

@@ -41,8 +41,12 @@ Thumbs.db
 # Test and build artefacts
 playwright-report/
 test-results/
+e2e/.logs/
 coverage/
 lighthouse-report*
 
 # Local infrastructure state
 docker/data/
+
+# k6 run output
+loadtest/summary.json

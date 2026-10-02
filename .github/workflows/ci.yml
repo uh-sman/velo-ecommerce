@@ -39,26 +39,24 @@ jobs:
       run:
         working-directory: apps/api
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: velo
-          POSTGRES_PASSWORD: velo
-          POSTGRES_DB: velo_test
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U velo"
-          --health-interval 5s --health-timeout 3s --health-retries 10
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s --health-timeout 3s --health-retries 10
+    # The same containers as local development (docker/docker-compose.dev.yml),
+    # so search and media tests run in CI instead of skipping.
+    env:
+      VELO_MEILISEARCH_URL: http://127.0.0.1:7700
+      VELO_MEILISEARCH_MASTER_KEY: local-dev-master-key
+      VELO_S3_ENDPOINT_URL: http://127.0.0.1:9000
+      VELO_S3_REGION: us-east-1
+      VELO_S3_BUCKET: velo-media
+      VELO_S3_ACCESS_KEY_ID: velo
+      VELO_S3_SECRET_ACCESS_KEY: velo-dev-secret
+      VELO_MEDIA_PUBLIC_URL: http://127.0.0.1:9000/velo-media
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start Postgres, Redis, Meilisearch and S3
+        working-directory: .
+        run: docker compose -f docker/docker-compose.dev.yml up -d --wait postgres redis meilisearch s3
 
       - uses: astral-sh/setup-uv@v3
         with:
@@ -67,6 +65,9 @@ jobs:
 
       - run: uv python install ${{ env.PYTHON_VERSION }}
       - run: uv sync --all-groups --frozen
+
+      - name: Create the media bucket
+        run: uv run python -m velo.scripts.storage_init
 
       - name: Lint
         run: uv run ruff check --output-format=github .
@@ -77,17 +78,24 @@ jobs:
       - name: Types
         run: uv run mypy .
 
-      - name: Unit tests
-        run: uv run pytest -m "not integration" --cov=velo --cov-report=term-missing
-
-      - name: Integration tests
+      # Unit and integration together, so the coverage gate (85%, pyproject.toml)
+      # measures what the whole suite exercises. Contract tests run separately.
+      - name: Tests and coverage gate
         env:
           VELO_RUN_INTEGRATION: "1"
-          VELO_ENV: development
-          VELO_SECRET_KEY: ci-secret-key-that-is-long-enough-to-validate
-          VELO_DATABASE_URL: postgresql+asyncpg://velo:velo@localhost:5432/velo_test
-          VELO_REDIS_URL: redis://localhost:6379/0
-        run: uv run pytest -m integration
+          VELO_TEST_DATABASE_URL: postgresql+asyncpg://velo:velo@localhost:5432/velo_test
+          VELO_TEST_REDIS_URL: redis://localhost:6379/1
+        run: uv run pytest -m "not contract" --cov=velo --cov-report=term-missing
+
+      # schemathesis against the published OpenAPI document: no 5xx, and every
+      # status, content type and body as documented (tests/integration/test_contract.py).
+      - name: Contract tests
+        env:
+          VELO_RUN_INTEGRATION: "1"
+          VELO_TEST_DATABASE_URL: postgresql+asyncpg://velo:velo@localhost:5432/velo_test
+          VELO_TEST_REDIS_URL: redis://localhost:6379/1
+          VELO_CONTRACT_EXAMPLES: "20"
+        run: uv run pytest -m contract
 
       - name: Export the OpenAPI document
         env:
@@ -135,8 +143,56 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      # Vitest with the 75% coverage gate in each app's vitest.config.ts.
+      - run: pnpm test:coverage
       - run: pnpm build
+
+  # ─── End to end ───────────────────────────────────────────────────────────
+  # Six customer and staff journeys on Chromium, Firefox and WebKit, with axe on
+  # every page (e2e/). Payments go through the sandbox provider: no Stripe keys.
+  e2e:
+    name: E2E — Playwright, three browsers
+    runs-on: ubuntu-latest
+    needs: [api, web]
+    timeout-minutes: 45
+    env:
+      CI: "true"
+      E2E_DATABASE_URL: postgresql+asyncpg://velo:velo@127.0.0.1:5432/velo_e2e
+      E2E_REDIS_URL: redis://127.0.0.1:6379/3
+      E2E_SMTP_PORT: "1025"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the infrastructure
+        run: docker compose -f docker/docker-compose.dev.yml up -d --wait
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+        working-directory: apps/api
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm e2e:install
+
+      - run: pnpm e2e
+
+      - name: Keep the report, traces and server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e
+          path: |
+            e2e/test-results
+            e2e/playwright-report
+            e2e/.logs
 
   # ─── Docker ───────────────────────────────────────────────────────────────
   images:
@@ -171,7 +227,7 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [secrets, api, web, images]
+    needs: [secrets, api, web, e2e, images]
     if: always()
     steps:
       - name: Fail if any job failed

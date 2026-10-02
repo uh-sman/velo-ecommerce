@@ -96,7 +96,13 @@ describe("Confirmation", () => {
     );
   });
 
-  it("shows a declined payment as a page state", async () => {
+  it("shows a declined payment as a page state once it stays declined", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => {
+      const value = now;
+      now += 20_000;
+      return value;
+    });
     server.use(
       ok(
         "get",
@@ -111,6 +117,30 @@ describe("Confirmation", () => {
     expect(
       await screen.findByRole("heading", { name: "Payment not completed" }),
     ).toBeInTheDocument();
+  });
+
+  it("does not report a decline left over from an earlier card while the retry settles", async () => {
+    let calls = 0;
+    server.use(
+      on("get", "/api/v1/checkout/{checkout_id}", () => {
+        calls += 1;
+        return HttpResponse.json(
+          calls === 1
+            ? makeCheckout({
+                status: "payment_pending",
+                payment: { status: "failed", failure_message: "Your card was declined." },
+              })
+            : confirmed,
+        );
+      }),
+      fail("post", "/api/v1/orders/lookup", { status: 404 }),
+    );
+    render(<Confirmation checkoutId="chk_1" redirectStatus={null} />);
+    expect(
+      await screen.findByRole("heading", { name: /Order confirmed/ }, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Payment not completed")).not.toBeInTheDocument();
+    expect(calls).toBe(2);
   });
 
   it("keeps confirming until the webhook-created order appears", async () => {

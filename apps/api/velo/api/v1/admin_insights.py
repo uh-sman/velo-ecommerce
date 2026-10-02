@@ -18,6 +18,7 @@ from fastapi import APIRouter, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from velo.api.deps import AdminDep, AnalyticsDep, AuditReaderDep, ReportsReaderDep, SessionDep
+from velo.api.openapi import CSV
 from velo.core.errors import ValidationError
 from velo.core.pagination import CursorPage, PaginationInfo, decode_cursor, encode_cursor
 from velo.domains.platform.audit import AuditFilter, AuditReader, SavedViews
@@ -115,7 +116,9 @@ async def summary(
     )
 
 
-@router.get("/analytics/revenue", response_model=list[PointView], summary="Revenue over time")
+@router.get(
+    "/analytics/revenue", response_model=list[PointView], summary="Revenue over time", responses=CSV
+)
 async def revenue(
     _: ReportsReaderDep,
     service: AnalyticsDep,
@@ -139,7 +142,12 @@ async def revenue(
     ]
 
 
-@router.get("/analytics/products", response_model=list[TopProductView], summary="Top products")
+@router.get(
+    "/analytics/products",
+    response_model=list[TopProductView],
+    summary="Top products",
+    responses=CSV,
+)
 async def top_products(
     _: ReportsReaderDep,
     service: AnalyticsDep,
@@ -177,7 +185,12 @@ async def funnel(
     return [FunnelView(step=s.step, count=s.count) for s in await service.funnel(start, end)]
 
 
-@router.get("/analytics/cohorts", response_model=list[CohortView], summary="Monthly retention")
+@router.get(
+    "/analytics/cohorts",
+    response_model=list[CohortView],
+    summary="Monthly retention",
+    responses=CSV,
+)
 async def cohorts(
     _: ReportsReaderDep,
     service: AnalyticsDep,

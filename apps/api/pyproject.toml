@@ -107,6 +107,7 @@ addopts = "-q --strict-markers"
 markers = [
     "integration: requires Postgres and Redis from docker/docker-compose.dev.yml",
     "concurrency: races real transactions; slow by design",
+    "contract: schemathesis against the published OpenAPI document; needs a free port",
 ]
 
 [tool.coverage.run]
@@ -115,3 +116,9 @@ markers = [
 concurrency = ["greenlet", "thread"]
 branch = true
 source = ["velo"]
+
+[tool.coverage.report]
+# PLANNING.md Phase 13: the build fails below 85%. Measured at 89% (2026-10-02)
+# over unit and integration together; a run of either alone falls short.
+fail_under = 85
+skip_covered = true

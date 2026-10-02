@@ -17,6 +17,7 @@ from velo import __version__
 from velo.api import health
 from velo.api.csrf import CsrfMiddleware
 from velo.api.deps import close_meili, close_payment_providers
+from velo.api.openapi import install_openapi
 from velo.api.v1.router import api_router
 from velo.core.config import Settings, get_settings
 from velo.core.errors import register_exception_handlers
@@ -86,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     register_exception_handlers(app)
+    install_openapi(app)
 
     # Health checks are unversioned: orchestrators should not have to know the
     # API version to decide whether to kill a container.

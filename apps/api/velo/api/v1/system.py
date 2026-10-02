@@ -16,6 +16,7 @@ from pydantic import AwareDatetime, BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from velo.api.deps import AdminDep
+from velo.api.openapi import PROMETHEUS
 from velo.core.config import Settings, get_settings
 from velo.db.redis import get_redis
 from velo.db.session import get_session
@@ -70,6 +71,7 @@ class WorkerHealthResponse(BaseModel):
     "/worker",
     response_model=WorkerHealthResponse,
     summary="Worker liveness, queue depth and backlogs (staff; ?format=prometheus)",
+    responses=PROMETHEUS,
 )
 async def worker(
     _: AdminDep,

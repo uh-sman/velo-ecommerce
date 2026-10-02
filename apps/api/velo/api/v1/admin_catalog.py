@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from velo.api.deps import (
     CatalogAdminDep,
@@ -20,6 +20,7 @@ from velo.api.deps import (
     CsvServiceDep,
     ReviewServiceDep,
 )
+from velo.api.openapi import CSV
 from velo.core.errors import ValidationError
 from velo.core.pagination import CursorPage
 from velo.domains.catalog.csv_io import ImportRejectedError, ImportReport
@@ -81,7 +82,12 @@ async def create_product(
 
 
 # Declared before /products/{product_id} so "export" is not read as an id.
-@router.get("/products/export", summary="Export the catalog as CSV")
+@router.get(
+    "/products/export",
+    summary="Export the catalog as CSV",
+    response_class=Response,
+    responses=CSV,
+)
 async def export_products(_: CatalogReaderDep, service: CsvServiceDep) -> StreamingResponse:
     filename = f"velo-catalog-{datetime.now(UTC):%Y%m%d-%H%M}.csv"
     return StreamingResponse(

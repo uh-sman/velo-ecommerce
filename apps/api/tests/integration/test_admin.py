@@ -405,3 +405,13 @@ async def test_analytics_report_what_was_sold(
         params={"since": "2026-01-02T00:00:00Z", "until": "2026-01-01T00:00:00Z"},
     )
     assert window.status_code == 422
+
+
+async def test_a_value_postgres_cannot_store_is_a_422_not_a_500(admin: Browser) -> None:
+    """Found by the contract tests: a NUL character in any text field reached the database."""
+    response = await admin.post(
+        "/api/v1/admin/discounts", json={"type": "free_shipping", "title": "Half\x00price"}
+    )
+    assert response.status_code == 422, response.text
+    assert problem(response) == "validation-failed"
+    assert await sql("SELECT count(*) FROM discounts") == 0
