@@ -1,0 +1,9 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+{% if status == "requested" %}<p style="margin:0 0 16px 0;">We have your request to return items from order <strong>{{ order_number }}</strong> (return <strong>{{ rma_number }}</strong>). We will review it shortly and email you the next steps.</p>
+{% elif status == "approved" %}<p style="margin:0 0 16px 0;">Your return <strong>{{ rma_number }}</strong> for order <strong>{{ order_number }}</strong> is approved.</p>
+<p style="margin:0 0 16px 0;font-size:14px;color:#475569;">Print the return label from your order page, pack the items with it, and send the parcel to the address on the label. We refund once it arrives and is checked.</p>
+{{ m.button(order_url, "Print your return label") }}
+{% else %}<p style="margin:0 0 16px 0;">We are unable to accept the return <strong>{{ rma_number }}</strong> for order <strong>{{ order_number }}</strong>. Reply to this email if you have any questions.</p>{% endif %}
+{% if note %}<p style="margin:0;font-size:14px;color:#475569;">Note from our team: {{ note }}</p>{% endif %}
+{% endblock %}

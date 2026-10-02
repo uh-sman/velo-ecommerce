@@ -137,7 +137,10 @@ export function safeNext(next: string | null | undefined, fallback = "/account")
 
 /** "14 minutes", "1 hour" — for honest cooldown messages. */
 export function describeWait(seconds: number): string {
-  if (seconds < 90) return `${String(Math.max(1, Math.round(seconds)))} seconds`;
+  if (seconds < 90) {
+    const whole = Math.max(1, Math.round(seconds));
+    return whole === 1 ? "1 second" : `${String(whole)} seconds`;
+  }
   const minutes = Math.round(seconds / 60);
   if (minutes < 90) return `${String(minutes)} minutes`;
   const hours = Math.round(minutes / 60);

@@ -173,7 +173,10 @@ class PaystackProvider:
             raise SignatureError("signed body is not JSON") from exc
         if not isinstance(payload, dict) or "event" not in payload:
             raise SignatureError("signed body is not an event")
-        return self.parse_event(payload)
+        try:
+            return self.parse_event(payload)
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise SignatureError("signed body is not a well-formed event") from exc
 
     def parse_event(self, payload: dict[str, Any]) -> WebhookEvent:
         event_type = str(payload["event"])

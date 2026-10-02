@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from hypothesis import given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from velo.domains.orders.rules import (
@@ -110,6 +110,8 @@ class TestLineShare:
         assert line_share(1000, 2, 2, 1) == 0
         assert line_share(1000, 2, 1, 5) == 500
 
+    # st.data() draws per line, which a loaded CI box can find slow; that is not a failure.
+    @settings(suppress_health_check=[HealthCheck.too_slow])
     @given(
         total=st.integers(min_value=0, max_value=10**9),
         quantity=st.integers(min_value=1, max_value=50),

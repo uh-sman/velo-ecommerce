@@ -78,7 +78,10 @@ class Settings(BaseSettings):
     paystack_public_key: str = ""
     paystack_api_base: str = "https://api.paystack.co"
     # Which provider takes a currency; anything unlisted goes to the default.
-    payment_default_provider: Literal["stripe", "paystack"] = "stripe"
+    payment_default_provider: Literal["stripe", "paystack", "sandbox"] = "stripe"
+    # A provider that never leaves the building, for E2E and load tests (payments/sandbox.py).
+    # Refused in production.
+    payment_sandbox: bool = False
     payment_currency_providers: Annotated[dict[str, str], NoDecode] = Field(
         default_factory=lambda: dict.fromkeys(("NGN", "GHS", "ZAR", "KES"), "paystack")
     )
@@ -127,6 +130,15 @@ class Settings(BaseSettings):
     email_from: str = "orders@velo.example"
     # Where links in emails point: verify-email and reset-password pages.
     storefront_url: str = "http://localhost:3000"
+    # Where staff links point: invitations.
+    admin_url: str = "http://localhost:3001"
+    # The API's public origin, for links that point at it (one-click unsubscribe).
+    public_api_url: str = "http://localhost:8000"
+    # Resend (production email). Empty key: SMTP is used instead (MailHog in development).
+    resend_api_key: SecretStr = SecretStr("")
+    resend_api_base: str = "https://api.resend.com"
+    # Svix secret ("whsec_…") signing Resend's delivery webhooks. Empty: endpoint off.
+    resend_webhook_secret: SecretStr = SecretStr("")
 
     # ── CORS ───────────────────────────────────────────────────────────────
     # NoDecode: without it pydantic-settings JSON-decodes list fields from the
@@ -187,6 +199,8 @@ class Settings(BaseSettings):
             raise ValueError("cookie_secure must be true in production.")
         if len(self.secret_key.get_secret_value()) < 32:
             raise ValueError("secret_key must be at least 32 characters in production.")
+        if self.payment_sandbox:
+            raise ValueError("payment_sandbox must be false in production: it takes no money.")
         if self.stripe_secret_key.get_secret_value() and not (
             self.stripe_webhook_secret.get_secret_value()
         ):

@@ -1,0 +1,6 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">Your card was declined, so we have not taken any money and your order has not been placed.</p>
+<p style="margin:0;font-size:14px;color:#475569;">Your cart is saved and the items are held for a little while. You can try another card or payment method.</p>
+{{ m.button(cart_url, "Return to your cart") }}
+{% endblock %}

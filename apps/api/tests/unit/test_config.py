@@ -101,3 +101,8 @@ def test_the_repo_root_env_file_is_read_when_running_from_apps_api(
         "VELO_DATABASE_URL=postgresql+asyncpg://velo:velo@localhost:5432/from_local\n"
     )
     assert Settings().database_url.endswith("/from_local")
+
+
+def test_production_refuses_the_payment_sandbox() -> None:
+    with pytest.raises(ValidationError, match="payment_sandbox"):
+        _settings(env="production", payment_sandbox="true")

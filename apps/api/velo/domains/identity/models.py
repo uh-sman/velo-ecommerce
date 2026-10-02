@@ -100,3 +100,43 @@ class Address(HasId, HasTimestamps, Base):
             postgresql_where=text("is_default_billing AND user_id IS NOT NULL"),
         ),
     )
+
+
+STAFF_ROLES_INVITABLE = ("fulfilment", "staff", "admin", "owner")
+
+
+class StaffInvitation(HasId, HasCreatedAt, Base):
+    """An emailed invitation to join the admin with a role. Only the token's hash is kept."""
+
+    __tablename__ = "staff_invitations"
+
+    email: Mapped[str] = mapped_column(CITEXT)
+    role: Mapped[str]
+    token_hash: Mapped[str] = mapped_column(unique=True)
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    expires_at: Mapped[datetime]
+    accepted_at: Mapped[datetime | None]
+    revoked_at: Mapped[datetime | None]
+
+    __table_args__ = (
+        one_of("role", *STAFF_ROLES_INVITABLE),
+        Index(
+            "idx_invitations_open",
+            "email",
+            postgresql_where=text("accepted_at IS NULL AND revoked_at IS NULL"),
+        ),
+    )
+
+
+class CustomerNote(HasId, HasCreatedAt, Base):
+    """Staff notes on a customer: what support knows that the order history does not."""
+
+    __tablename__ = "customer_notes"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    author_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    body: Mapped[str]
+
+    __table_args__ = (Index("idx_customer_notes_user", "user_id", text("created_at DESC")),)

@@ -1,0 +1,8 @@
+{% if status == "requested" %}We have your request to return items from order {{ order_number }} (return {{ rma_number }}). We will review it shortly and email you the next steps.{% elif status == "approved" %}Your return {{ rma_number }} for order {{ order_number }} is approved.
+
+Print the return label from your order page, pack the items with it, and send the parcel to the address on the label. We refund once it arrives and is checked:
+{{ order_url }}{% else %}We are unable to accept the return {{ rma_number }} for order {{ order_number }}. Reply to this email if you have any questions.{% endif %}{% if note %}
+
+Note from our team: {{ note }}{% endif %}
+
+{{ texts.signature }}

@@ -898,6 +898,112 @@ CREATE INDEX idx_audit_actor  ON audit_log (actor_id, created_at DESC);
 
 ---
 
+### Admin (Phase 11)
+
+```sql
+-- Operator-editable settings, one JSON document per key ('store', 'emails').
+-- No secrets: payment keys stay in the environment.
+CREATE TABLE store_settings (
+    key         TEXT PRIMARY KEY,
+    value       JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by  UUID REFERENCES users(id) ON DELETE SET NULL
+);
+
+-- Emailed invitations to the admin. Only the token's hash is stored.
+CREATE TABLE staff_invitations (
+    id           UUID PRIMARY KEY DEFAULT uuidv7(),
+    email        CITEXT NOT NULL,
+    role         TEXT NOT NULL CHECK (role IN ('fulfilment','staff','admin','owner')),
+    token_hash   TEXT NOT NULL UNIQUE,
+    invited_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+    expires_at   TIMESTAMPTZ NOT NULL,
+    accepted_at  TIMESTAMPTZ,
+    revoked_at   TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_invitations_open ON staff_invitations (email)
+    WHERE accepted_at IS NULL AND revoked_at IS NULL;
+
+CREATE TABLE customer_notes (
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    author_id   UUID REFERENCES users(id) ON DELETE SET NULL,
+    body        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_customer_notes_user ON customer_notes (user_id, created_at DESC);
+
+-- A staff member's named filters for an admin list.
+CREATE TABLE saved_views (
+    id          UUID PRIMARY KEY DEFAULT uuidv7(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scope       TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    query       JSONB NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, scope, name)
+);
+```
+
+---
+
+### Email and jobs (Phase 12)
+
+```sql
+-- Every customer email; dedupe_key makes each event send exactly once.
+CREATE TABLE sent_emails (
+    id                   UUID PRIMARY KEY DEFAULT uuidv7(),
+    kind                 TEXT NOT NULL,                 -- 'order_confirmed', 'cart_recovery', ...
+    to_email             CITEXT NOT NULL,
+    subject              TEXT NOT NULL,
+    user_id              UUID REFERENCES users(id) ON DELETE SET NULL,
+    dedupe_key           TEXT UNIQUE,                   -- 'order.created:<order id>'
+    status               TEXT NOT NULL DEFAULT 'queued' CHECK (status IN
+                           ('queued','sent','delivered','bounced','complained','failed','skipped')),
+    skip_reason          TEXT,                          -- 'unsubscribed', 'rate_limited'
+    provider             TEXT,
+    provider_message_id  TEXT UNIQUE,                   -- matched by the delivery webhook
+    error                TEXT,
+    sent_at              TIMESTAMPTZ,
+    delivered_at         TIMESTAMPTZ,
+    bounced_at           TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_sent_emails_to ON sent_emails (to_email, created_at DESC);
+
+-- Opt-outs by address, so a guest can unsubscribe too.
+CREATE TABLE email_preferences (
+    email           CITEXT PRIMARY KEY,
+    cart_reminders  BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Where a cart is in the 1 h / 24 h / 72 h reminder sequence.
+CREATE TABLE cart_reminders (
+    cart_id       UUID PRIMARY KEY REFERENCES carts(id) ON DELETE CASCADE,
+    email         CITEXT NOT NULL,
+    step          INT NOT NULL DEFAULT 0,
+    activity_at   TIMESTAMPTZ NOT NULL,   -- newer cart activity restarts the sequence
+    last_sent_at  TIMESTAMPTZ
+);
+
+-- Background jobs that exhausted their retries: alerted on, replayable.
+CREATE TABLE job_failures (
+    id           UUID PRIMARY KEY DEFAULT uuidv7(),
+    job          TEXT NOT NULL,
+    args         JSONB NOT NULL,
+    error        TEXT NOT NULL,
+    attempts     INT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'dead' CHECK (status IN ('dead','replayed')),
+    replayed_at  TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_job_failures_dead ON job_failures (created_at) WHERE status = 'dead';
+```
+
+---
+
 ## 11. Index strategy
 
 Every index below exists to serve a named query. An index with no query is write overhead with no payoff.

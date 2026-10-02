@@ -1,0 +1,8 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">{{ texts.order_shipped_intro }} Order <strong>{{ order_number }}</strong>:</p>
+{{ m.lines_table(lines) }}
+{% if tracking_number %}<p style="margin:0 0 8px 0;font-size:14px;">Tracking with {{ carrier or "the carrier" }}: <strong>{{ tracking_number }}</strong></p>{% endif %}
+{% if tracking_url %}{{ m.button(tracking_url, "Track your parcel") }}{% else %}{{ m.button(order_url, "View your order") }}{% endif %}
+{% if not complete %}<p style="margin:0;font-size:14px;color:#475569;">The rest of your order follows separately.</p>{% endif %}
+{% endblock %}

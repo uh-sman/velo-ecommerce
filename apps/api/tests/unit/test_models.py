@@ -29,6 +29,8 @@ EXPECTED_TABLES = {
     "payments", "payment_events", "refunds", "refund_items", "idempotency_keys",
     "discounts", "discount_redemptions", "shipping_zones", "shipping_rates", "tax_rates",
     "outbox_events", "webhook_deliveries", "audit_log",
+    "store_settings", "saved_views", "staff_invitations", "customer_notes",
+    "sent_emails", "email_preferences", "cart_reminders", "job_failures",
 }  # fmt: skip
 
 

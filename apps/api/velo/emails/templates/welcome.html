@@ -1,0 +1,6 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">Welcome{% if first_name %}, {{ first_name }}{% endif %}.</p>
+<p style="margin:0 0 16px 0;font-size:14px;color:#475569;">Your account keeps your orders, addresses and wishlist in one place. Free shipping starts at $75, and every order has 30 days to return.</p>
+{{ m.button(shop_url, "Start shopping") }}
+{% endblock %}

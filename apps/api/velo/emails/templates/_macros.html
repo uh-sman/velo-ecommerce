@@ -1,0 +1,35 @@
+{#- Pieces shared by the HTML templates. Inline styles throughout (ADR-011). -#}
+
+{% macro button(url, label) -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
+  <tr>
+    <td style="background-color:#1d4ed8;border-radius:6px;">
+      <a href="{{ url }}" style="display:inline-block;padding:12px 24px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;">{{ label }}</a>
+    </td>
+  </tr>
+</table>
+{%- endmacro %}
+
+{% macro lines_table(lines) -%}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0;border-collapse:collapse;">
+  {% for line in lines %}
+  <tr>
+    <td style="padding:8px 0;border-bottom:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0f172a;">
+      {{ line.quantity }} &times; {{ line.title }}{% if line.variant %} <span style="color:#64748b;">({{ line.variant }})</span>{% endif %}
+    </td>
+    {% if line.amount %}
+    <td align="right" style="padding:8px 0;border-bottom:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#0f172a;white-space:nowrap;">{{ line.amount }}</td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+</table>
+{%- endmacro %}
+
+{% macro total_row(label, value) -%}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#0f172a;">{{ label }}</td>
+    <td align="right" style="padding:4px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#0f172a;">{{ value }}</td>
+  </tr>
+</table>
+{%- endmacro %}

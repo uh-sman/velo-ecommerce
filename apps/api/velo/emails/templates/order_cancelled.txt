@@ -1,0 +1,5 @@
+Order {{ order_number }} has been cancelled {% if by_customer %}as you asked{% else %}by our team{% endif %}.
+
+Anything you paid is being refunded to your original payment method. You will get a separate email when the refund is issued.
+
+{{ texts.signature }}

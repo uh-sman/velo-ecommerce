@@ -211,6 +211,9 @@ function Filters({
   const [max, setMax] = useState(state.max?.toString() ?? "");
   const minId = useId();
   const maxId = useId();
+  // Filters renders twice (sidebar and phone sheet), so every id must be unique per instance.
+  const idPrefix = useId();
+  const inStockId = `${idPrefix}-in-stock`;
 
   useEffect(() => {
     setMin(state.min?.toString() ?? "");
@@ -237,9 +240,9 @@ function Filters({
     <div className="flex flex-col gap-6">
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-semibold">Availability</legend>
-        <label htmlFor="filter-in-stock" className="flex min-h-11 items-center gap-3 text-sm">
+        <label htmlFor={inStockId} className="flex min-h-11 items-center gap-3 text-sm">
           <Checkbox
-            id="filter-in-stock"
+            id={inStockId}
             checked={state.inStock}
             onCheckedChange={(checked) => {
               apply({ ...state, inStock: checked === true });
@@ -291,7 +294,7 @@ function Filters({
         <fieldset className="flex flex-col gap-1">
           <legend className="mb-2 text-sm font-semibold">Brand</legend>
           {brands.map((brand) => {
-            const id = `brand-${brand}`;
+            const id = `${idPrefix}-brand-${brand}`;
             const checked = state.brands.includes(brand);
             return (
               <label key={brand} htmlFor={id} className="flex min-h-11 items-center gap-3 text-sm">

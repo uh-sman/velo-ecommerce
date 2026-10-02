@@ -1,0 +1,6 @@
+Your order {{ order_number }} has been delivered. We hope you love it.
+
+Not right? You have {{ return_window_days }} days to send it back - start a return from your order page:
+{{ order_url }}
+
+{{ texts.signature }}

@@ -1,0 +1,45 @@
+{#- The shell every customer email shares (ADR-011).
+    Email clients are not browsers: one 600px table, inline styles only, no web
+    fonts, no flexbox or grid, nothing positioned. A hidden preheader gives the
+    inbox a summary line. Dark-mode clients invert colours on their own; the
+    palette here survives that. -#}
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{ preheader }}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f5f9;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:8px;">
+        <tr>
+          <td style="padding:24px 32px 8px 32px;font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:bold;color:#0f172a;">
+            {{ store.name }}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:8px 32px 24px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:24px;color:#0f172a;">
+            {% block body %}{% endblock %}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px 24px 32px;border-top:1px solid #e2e8f0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#64748b;">
+            {{ texts.signature }}<br>
+            {% if store.support_email %}Questions? Reply to this email or write to <a href="mailto:{{ store.support_email }}" style="color:#475569;">{{ store.support_email }}</a>.<br>{% endif %}
+            {% for line in store.address %}{{ line }}{% if not loop.last %} · {% endif %}{% endfor %}
+            {% if unsubscribe_url %}<br><a href="{{ unsubscribe_url }}" style="color:#475569;">Unsubscribe from these emails</a>{% endif %}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import exists, func, literal, or_, select, tuple_, update
+from sqlalchemy import column, exists, func, literal, or_, select, table, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from velo.domains.orders.models import (
@@ -100,6 +100,9 @@ class ReturnItemRecord:
     quantity: int
     restock: bool
     condition: str | None
+    product_title: str = ""
+    variant_title: str = ""
+    sku: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +129,10 @@ class OrderFilters:
     placed_from: datetime | None = None
     placed_to: datetime | None = None
     user_id: uuid.UUID | None = None
+    min_total: int | None = None  # minor units, inclusive
+    max_total: int | None = None
+    needs_attention: bool | None = None  # shortfalls and open disputes
+    oldest_first: bool = False
 
 
 def _order(row: Order) -> OrderRecord:
@@ -261,6 +268,16 @@ class OrderRepository:
             conditions.append(Order.placed_at < filters.placed_to)
         if filters.user_id:
             conditions.append(Order.user_id == filters.user_id)
+        if filters.needs_attention is not None:
+            flagged = or_(
+                Order.metadata_["attention"].is_not(None),
+                Order.metadata_["dispute"]["open"].as_boolean().is_(True),
+            )
+            conditions.append(flagged if filters.needs_attention else ~flagged)
+        if filters.min_total is not None:
+            conditions.append(Order.total_amount >= filters.min_total)
+        if filters.max_total is not None:
+            conditions.append(Order.total_amount <= filters.max_total)
         if filters.query:
             text = filters.query.strip()
             conditions.append(
@@ -272,15 +289,16 @@ class OrderRepository:
                 )
             )
         query = select(Order).where(*conditions)
+        key = tuple_(Order.placed_at, Order.id)
         if after is not None:
-            query = query.where(
-                tuple_(Order.placed_at, Order.id) < tuple_(literal(after[0]), literal(after[1]))
-            )
-        rows = (
-            await self._session.scalars(
-                query.order_by(Order.placed_at.desc(), Order.id.desc()).limit(limit + 1)
-            )
-        ).all()
+            bound = tuple_(literal(after[0]), literal(after[1]))
+            query = query.where(key > bound if filters.oldest_first else key < bound)
+        order = (
+            (Order.placed_at.asc(), Order.id.asc())
+            if filters.oldest_first
+            else (Order.placed_at.desc(), Order.id.desc())
+        )
+        rows = (await self._session.scalars(query.order_by(*order).limit(limit + 1))).all()
         total = None
         if count:
             total = int(
@@ -328,6 +346,16 @@ class OrderRepository:
             )
             for row in rows
         ]
+
+    async def user_emails(self, user_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
+        """Who the actors in an order's trail are, by email."""
+        if not user_ids:
+            return {}
+        users = table("users", column("id"), column("email"))
+        rows = await self._session.execute(
+            select(users.c.id, users.c.email).where(users.c.id.in_(user_ids))
+        )
+        return {user_id: str(email) for user_id, email in rows.all()}
 
     # ── Fulfilments ───────────────────────────────────────────────────────
 
@@ -443,10 +471,18 @@ class OrderRepository:
         status: str | None,
         limit: int,
         after: tuple[datetime, uuid.UUID] | None,
-    ) -> tuple[list[ReturnRecord], bool]:
+    ) -> tuple[list[ReturnRecord], bool, int]:
         query = select(Return)
         if status:
             query = query.where(Return.status == status)
+        total = int(
+            await self._session.scalar(
+                select(func.count())
+                .select_from(Return)
+                .where(*([Return.status == status] if status else []))
+            )
+            or 0
+        )
         if after is not None:
             query = query.where(
                 tuple_(Return.created_at, Return.id) < tuple_(literal(after[0]), literal(after[1]))
@@ -456,7 +492,7 @@ class OrderRepository:
                 query.order_by(Return.created_at.desc(), Return.id.desc()).limit(limit + 1)
             )
         ).all()
-        return [await self._return(row) for row in rows[:limit]], len(rows) > limit
+        return [await self._return(row) for row in rows[:limit]], len(rows) > limit, total
 
     async def update_return(self, return_id: uuid.UUID, **fields: Any) -> None:
         await self._session.execute(
@@ -478,9 +514,10 @@ class OrderRepository:
         ) is not None
 
     async def _return(self, row: Return) -> ReturnRecord:
-        items = (
-            await self._session.scalars(
-                select(ReturnItem)
+        lines = (
+            await self._session.execute(
+                select(ReturnItem, OrderItem.product_title, OrderItem.variant_title, OrderItem.sku)
+                .join(OrderItem, OrderItem.id == ReturnItem.order_item_id)
                 .where(ReturnItem.return_id == row.id)
                 .execution_options(populate_existing=True)
             )
@@ -502,7 +539,10 @@ class OrderRepository:
                     quantity=item.quantity,
                     restock=item.restock,
                     condition=item.condition,
+                    product_title=title,
+                    variant_title=variant,
+                    sku=sku,
                 )
-                for item in items
+                for item, title, variant, sku in lines
             ),
         )

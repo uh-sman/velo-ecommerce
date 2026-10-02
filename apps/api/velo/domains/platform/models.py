@@ -1,11 +1,11 @@
-"""Platform tables — DATA-MODEL.md §10: the outbox, outbound webhooks, and the audit log."""
+"""Platform tables — DATA-MODEL.md §10: the outbox, webhooks, audit log, settings, saved views."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, text
+from sqlalchemy import ForeignKey, Index, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import CITEXT, INET, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,3 +65,33 @@ class AuditLog(HasId, HasCreatedAt, Base):
         Index("idx_audit_entity", "entity_type", "entity_id", text("created_at DESC")),
         Index("idx_audit_actor", "actor_id", text("created_at DESC")),
     )
+
+
+class StoreSetting(Base):
+    """Operator-editable settings, one JSON document per key ('store', 'emails').
+
+    Secrets never live here — payment keys stay in the environment — so a
+    database dump or an admin screen can never leak one.
+    """
+
+    __tablename__ = "store_settings"
+
+    key: Mapped[str] = mapped_column(primary_key=True)
+    value: Mapped[JsonObject] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+
+class SavedView(HasId, HasCreatedAt, Base):
+    """A staff member's named filter set for an admin list ("Unshipped over $200")."""
+
+    __tablename__ = "saved_views"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    scope: Mapped[str]  # 'orders'
+    name: Mapped[str]
+    query: Mapped[JsonObject] = mapped_column(JSONB)
+
+    __table_args__ = (UniqueConstraint("user_id", "scope", "name"),)

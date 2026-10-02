@@ -1,0 +1,7 @@
+Confirm this is your email address, so we can reach you about your orders:
+
+{{ verify_url }}
+
+The link expires in 24 hours. If you did not create an account, ignore this email.
+
+{{ texts.signature }}

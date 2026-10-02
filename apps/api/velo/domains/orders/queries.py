@@ -34,6 +34,7 @@ from velo.domains.orders.views import (
     OrderSummaryView,
     OrderTotalsView,
     OrderView,
+    PaymentReferenceView,
     PaymentSummaryView,
     RefundView,
     ReturnLineView,
@@ -79,9 +80,13 @@ def return_view(returned: ReturnRecord, currency: str, number: str | None = None
                 quantity=item.quantity,
                 condition=item.condition,
                 restock=item.restock,
+                product_title=item.product_title,
+                variant_title=item.variant_title,
+                sku=item.sku,
             )
             for item in returned.items
         ],
+        order_id=returned.order_id,
         order_number=number,
     )
 
@@ -163,6 +168,8 @@ class OrderReader:
         refunds = await self._payments.refunds_for_order(order.id)
         payment = await self._payments.settled_payment_for_order(order.id)
         committed = sum(r.amount for r in refunds if r.status in ("pending", "succeeded"))
+        events = await self._orders.events(order.id)
+        emails = await self._orders.user_emails({e.actor_id for e in events if e.actor_id})
         return AdminOrderView(
             **parts,
             id=order.id,
@@ -178,11 +185,19 @@ class OrderReader:
                     to_status=event.to_status,
                     actor_type=event.actor_type,
                     actor_id=event.actor_id,
+                    actor_email=emails.get(event.actor_id) if event.actor_id else None,
                     payload=event.payload,
                     created_at=event.created_at,
                 )
-                for event in await self._orders.events(order.id)
+                for event in events
             ],
+            payment_reference=PaymentReferenceView(
+                provider=payment.provider,
+                intent_id=payment.provider_intent_id,
+                charge_id=payment.provider_charge_id,
+            )
+            if payment
+            else None,
             admin_refunds=[admin_refund_view(r) for r in refunds],
             refundable=_money(
                 refundable(payment.amount_captured, committed) if payment else 0, order.currency
@@ -340,14 +355,16 @@ class OrderReader:
 
     async def list_returns(
         self, *, status: str | None, limit: int, after: tuple[datetime, uuid.UUID] | None
-    ) -> tuple[list[ReturnView], bool, ReturnRecord | None]:
-        found, has_more = await self._orders.list_returns(status=status, limit=limit, after=after)
+    ) -> tuple[list[ReturnView], bool, ReturnRecord | None, int]:
+        found, has_more, total = await self._orders.list_returns(
+            status=status, limit=limit, after=after
+        )
         views = []
         for returned in found:
             order = await self._orders.get(returned.order_id)
             assert order is not None
             views.append(return_view(returned, order.currency, order.order_number))
-        return views, has_more, found[-1] if found else None
+        return views, has_more, found[-1] if found else None, total
 
     async def payment_label(self, order: OrderRecord) -> str | None:
         payment = await self._payments.settled_payment_for_order(order.id)

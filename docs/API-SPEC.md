@@ -394,22 +394,50 @@ All require an `admin`, `staff`, or `owner` role. Every mutation writes to `audi
 | Staff     | `GET /admin/staff`, `POST /admin/staff/invite`, `PATCH/DELETE /admin/staff/{id}`                                                                                        |
 | Audit     | `GET /admin/audit-log`                                                                                                                                                  |
 
+**Customers, discounts, settings, staff, audit, analytics (Phase 11).** As built:
+
+| Method           | Path                                                             | Permission        | Description                                                                                                      |
+| ---------------- | ---------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| GET              | `/admin/me`                                                      | `admin:access`    | The signed-in staff member's role and permissions — what the admin's menu shows                                  |
+| GET              | `/admin/customers`, `/admin/customers/{id}`                      | `customers:read`  | Search by email or name; order count, lifetime value (paid less refunded), addresses, recent orders              |
+| POST             | `/admin/customers/{id}/notes`                                    | `customers:write` | A staff note on a customer                                                                                       |
+| GET/POST         | `/admin/discounts`                                               | `discounts:write` | List (`q`, `status`: active, scheduled, expired, used_up, inactive) and create                                   |
+| GET/PATCH/DELETE | `/admin/discounts/{id}`                                          | `discounts:write` | Terms are fixed once redeemed (409); DELETE deletes an unused discount, deactivates a used one                   |
+| POST             | `/admin/discounts/preview`                                       | `discounts:write` | Price a sample basket with a draft discount, and check it against a customer — nothing is saved                  |
+| GET              | `/admin/settings`                                                | `settings:manage` | Store details, email texts, and payment providers (configured, test or live — never a key)                       |
+| PATCH            | `/admin/settings/store`, `/admin/settings/emails`                | `settings:manage` | Currency and the return window are read-only: they live in the environment                                       |
+| GET/POST, PATCH  | `/admin/shipping-zones`, `/admin/shipping-zones/{id}`            | `settings:manage` | Zones with their rates                                                                                           |
+| POST, PATCH      | `/admin/shipping-zones/{id}/rates`, `/admin/shipping-rates/{id}` | `settings:manage` | Rates in minor units, subtotal and weight bands, delivery estimates                                              |
+| GET/POST, PATCH  | `/admin/tax-rates`, `/admin/tax-rates/{id}`                      | `settings:manage` | Rates as fractions (0.0725 = 7.25%), inclusive or not                                                            |
+| GET              | `/admin/staff`                                                   | `staff:manage`    | Members and open invitations                                                                                     |
+| POST             | `/admin/staff/invite`                                            | `staff:manage`    | Emails a single-use link valid for 7 days; only its hash is stored                                               |
+| PATCH            | `/admin/staff/{id}`                                              | `staff:manage`    | Change role; `customer` revokes access. Ends their sessions. The last owner cannot be removed (409 `last-owner`) |
+| DELETE           | `/admin/staff/invitations/{id}`                                  | `staff:manage`    | Withdraw an invitation                                                                                           |
+| POST             | `/staff-invitations/accept`                                      | — (the token)     | `{token, password?, first_name?, last_name?}`: a new account sets a password; an existing one is upgraded        |
+| GET              | `/admin/audit-log`                                               | `audit:read`      | Filter by `actor` email, `entity_type`, `entity_id`, `action` (exact, or a prefix ending in `.`), dates          |
+| GET/POST, DELETE | `/admin/saved-views`, `/admin/saved-views/{id}`                  | `admin:access`    | A staff member's own named filters for a list (`scope`: orders, products, customers)                             |
+| GET              | `/admin/analytics/summary`                                       | `reports:read`    | Revenue, orders, AOV, refunded, units, new customers — and the previous period of the same length                |
+| GET              | `/admin/analytics/revenue`                                       | `reports:read`    | Per `day`, `week` or `month`, every bucket present (zeros included)                                              |
+| GET              | `/admin/analytics/products`, `/funnel`, `/cohorts`               | `reports:read`    | Top products; carts → checkouts → payments → orders; monthly first-order cohorts and their retention             |
+
+Analytics take `since` (inclusive) and `until` (exclusive), default the last 30 days, at most three years; days are UTC days. Revenue is money kept: paid orders less refunds; pending and cancelled orders never count. `revenue`, `products` and `cohorts` also answer `?format=csv`.
+
 **Orders (Phase 9).** As built:
 
-| Method | Path                                    | Permission      | Description                                                                                                                            |
-| ------ | --------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/admin/orders`                         | `orders:read`   | `status`, `payment_status`, `fulfilment_status`, `placed_from/to`; `q` matches an order number, a customer email, or a SKU on any line |
-| GET    | `/admin/orders/{id}`                    | `orders:read`   | Detail, with the `events` audit trail, refunds, and `refundable`                                                                       |
-| POST   | `/admin/orders/{id}/status`             | `orders:fulfil` | `processing` or `delivered` by hand; the rest follow from actions                                                                      |
-| PATCH  | `/admin/orders/{id}/notes`              | `orders:fulfil` | `{"internal_note"}`                                                                                                                    |
-| POST   | `/admin/orders/{id}/fulfilments`        | `orders:fulfil` | Ship `lines` (omit: everything left), `carrier`, `tracking_number`                                                                     |
-| PATCH  | `/admin/fulfilments/{id}`               | `orders:fulfil` | Parcel `status` (`in_transit`, `delivered`, `failed`, `cancelled`), tracking                                                           |
-| POST   | `/admin/orders/{id}/cancel`             | `orders:refund` | Cancel before shipping: restock, refund in full                                                                                        |
-| POST   | `/admin/orders/{id}/refunds`            | `orders:refund` | **Idempotency-Key required.** Lines, shipping, goodwill                                                                                |
-| GET    | `/admin/orders/{id}/invoice`            | `orders:read`   | Invoice PDF                                                                                                                            |
-| GET    | `/admin/orders/{id}/packing-slip`       | `orders:read`   | Packing slip PDF; `?fulfilment_id=` for one parcel                                                                                     |
-| GET    | `/admin/returns`, `/admin/returns/{id}` | `orders:read`   | The returns queue, filterable by `status`                                                                                              |
-| PATCH  | `/admin/returns/{id}`                   | `orders:fulfil` | `action`: `approve`, `reject`, `mark_in_transit`, `receive`, `refund` (needs `orders:refund`), `close`                                 |
+| Method | Path                                    | Permission      | Description                                                                                                                                                                 |
+| ------ | --------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/admin/orders`                         | `orders:read`   | `status`, `payment_status`, `fulfilment_status`, `placed_from/to`, `min_total/max_total` (minor units); `q` matches an order number, a customer email, or a SKU on any line |
+| GET    | `/admin/orders/{id}`                    | `orders:read`   | Detail, with the `events` audit trail, refunds, and `refundable`                                                                                                            |
+| POST   | `/admin/orders/{id}/status`             | `orders:fulfil` | `processing` or `delivered` by hand; the rest follow from actions                                                                                                           |
+| PATCH  | `/admin/orders/{id}/notes`              | `orders:fulfil` | `{"internal_note"}`                                                                                                                                                         |
+| POST   | `/admin/orders/{id}/fulfilments`        | `orders:fulfil` | Ship `lines` (omit: everything left), `carrier`, `tracking_number`                                                                                                          |
+| PATCH  | `/admin/fulfilments/{id}`               | `orders:fulfil` | Parcel `status` (`in_transit`, `delivered`, `failed`, `cancelled`), tracking                                                                                                |
+| POST   | `/admin/orders/{id}/cancel`             | `orders:refund` | Cancel before shipping: restock, refund in full                                                                                                                             |
+| POST   | `/admin/orders/{id}/refunds`            | `orders:refund` | **Idempotency-Key required.** Lines, shipping, goodwill                                                                                                                     |
+| GET    | `/admin/orders/{id}/invoice`            | `orders:read`   | Invoice PDF                                                                                                                                                                 |
+| GET    | `/admin/orders/{id}/packing-slip`       | `orders:read`   | Packing slip PDF; `?fulfilment_id=` for one parcel                                                                                                                          |
+| GET    | `/admin/returns`, `/admin/returns/{id}` | `orders:read`   | The returns queue, filterable by `status`                                                                                                                                   |
+| PATCH  | `/admin/returns/{id}`                   | `orders:fulfil` | `action`: `approve`, `reject`, `mark_in_transit`, `receive`, `refund` (needs `orders:refund`), `close`                                                                      |
 
 **Refund requests name lines, never amounts for them:** `{"lines": [{"order_item_id", "quantity", "restock"?}], "include_shipping"?, "extra_amount"?, "reason", "note"?}`. Each unit is priced from the order's snapshot as its cumulative share of the line total, so a line refunded in parts sums to exactly its total. `extra_amount` is a goodwill amount on top. `restock: true` is for units that have not shipped: their stock goes back and they come off the order. Errors: `422 refund-exceeds-capture` (cumulative refunds, pending ones included, would pass what was captured), `422 quantity-exceeded`, `422 nothing-to-refund`. A refund the provider cannot take right now is recorded and returned `pending`; reconciliation submits it within five minutes.
 
@@ -437,6 +465,19 @@ All require an `admin`, `staff`, or `owner` role. Every mutation writes to `audi
 **Tracking** takes `{"tracking_number", "status", "occurred_at"?}` from a carrier or an aggregator, signed with `VELO_TRACKING_WEBHOOK_SECRET` (empty: the endpoint is `404`). `in_transit` and `out_for_delivery` mean in transit; `delivered` delivers the parcel — and the order, once every parcel of a fully shipped order is delivered; `failed` and `exception` flag the order for staff. A status a parcel cannot move to is logged and acknowledged, so the carrier does not retry it forever.
 
 A bad or missing signature is `400 invalid-signature`, and nothing is stored. A verified event is stored under its provider event id and answered `200 {"received": true}` at once; a repeat of the same id gets the same answer and is dropped. The worker applies events afterwards (PAYMENTS-AND-CHECKOUT.md §6). An endpoint whose provider is not configured is `404`. `/webhooks/resend` arrives with email in Phase 12.
+
+### Email and notifications — Phase 12
+
+| Method    | Path                                | Auth             | Description                                                                                           |
+| --------- | ----------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
+| POST      | `/email/unsubscribe`                | — (signed token) | `?token=` or `{"token"}`. Also the target of mail clients' `List-Unsubscribe-Post` one-click; no CSRF |
+| POST      | `/cart/recover`                     | — (signed token) | A reminder's link: moves a guest cart to this browser (a new cookie token); an account's cart is 409  |
+| GET/PATCH | `/account/preferences`              | access           | `{order_updates (always true), cart_reminders, marketing}`                                            |
+| POST      | `/webhooks/resend`                  | Svix signature   | Delivered, bounced, complained — against the message id stored when the email was sent                |
+| GET       | `/system/worker`                    | `admin:access`   | Heartbeat, queue depth, outbox and dead-letter backlogs, failed emails; `?format=prometheus`          |
+| GET       | `/dev/emails`, `/dev/emails/{kind}` | development only | Every email rendered with sample data, as HTML or `?format=text`                                      |
+
+**Exactly once.** Every customer email is sent with a dedupe key — the outbox event, or for an order confirmation the order itself — recorded in `sent_emails`; an event relayed twice emails once, and a failed send is retried by the outbox relay and still sends once. Marketing email (cart reminders) honours opt-outs and carries an unsubscribe link and header; transactional email (receipts, shipping, refunds, account links) is always sent. Per recipient, at most 30 transactional emails an hour and 2 marketing a day.
 
 ### System
 

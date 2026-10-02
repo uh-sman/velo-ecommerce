@@ -37,13 +37,17 @@ from velo.domains.catalog.search import SearchService
 from velo.domains.catalog.service import CatalogService
 from velo.domains.catalog.wishlist import WishlistService
 from velo.domains.checkout.service import CheckoutAccess, CheckoutService
+from velo.domains.discounts.admin import DiscountAdminService
 from velo.domains.discounts.service import DiscountService
 from velo.domains.identity.addresses import AddressService
 from velo.domains.identity.breach import BreachChecker, NoBreachChecker, PwnedPasswordsChecker
+from velo.domains.identity.customers import CustomerAdminService
 from velo.domains.identity.permissions import Permission, has_permission
 from velo.domains.identity.repository import UserRecord
 from velo.domains.identity.service import AuthService, ClientInfo
+from velo.domains.identity.staff import StaffService
 from velo.domains.inventory.service import InventoryService
+from velo.domains.orders.analytics import AnalyticsService
 from velo.domains.orders.fulfilment import FulfilmentService
 from velo.domains.orders.lifecycle import OrderLifecycle
 from velo.domains.orders.queries import OrderReader
@@ -53,6 +57,8 @@ from velo.domains.orders.service import OrderService
 from velo.domains.payments.registry import PaymentProviders, build_providers
 from velo.domains.payments.service import IdempotencyService, PaymentService
 from velo.domains.platform.events import Actor
+from velo.domains.platform.settings import SettingsService
+from velo.domains.shipping.admin import ShippingAdminService
 from velo.domains.shipping.service import RulesTaxProvider, ShippingService
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -444,3 +450,48 @@ def get_wishlist_service(session: SessionDep, catalog: CatalogServiceDep) -> Wis
 
 
 WishlistServiceDep = Annotated[WishlistService, Depends(get_wishlist_service)]
+
+
+# ── Admin: customers, discounts, settings, staff, audit, analytics (Phase 11) ──
+
+
+def get_customer_admin(session: SessionDep) -> CustomerAdminService:
+    return CustomerAdminService(session)
+
+
+def get_discount_admin(session: SessionDep, settings: SettingsDep) -> DiscountAdminService:
+    return DiscountAdminService(session, currency=settings.currency)
+
+
+def get_shipping_admin(session: SessionDep) -> ShippingAdminService:
+    return ShippingAdminService(session)
+
+
+def get_settings_service(session: SessionDep, settings: SettingsDep) -> SettingsService:
+    return SettingsService(session, settings)
+
+
+def get_staff_service(
+    session: SessionDep, settings: SettingsDep, mailer: Annotated[Mailer, Depends(get_mailer)]
+) -> StaffService:
+    return StaffService(session, settings, mailer)
+
+
+def get_analytics(session: SessionDep, settings: SettingsDep) -> AnalyticsService:
+    return AnalyticsService(session, currency=settings.currency)
+
+
+CustomerAdminDep = Annotated[CustomerAdminService, Depends(get_customer_admin)]
+DiscountAdminDep = Annotated[DiscountAdminService, Depends(get_discount_admin)]
+ShippingAdminDep = Annotated[ShippingAdminService, Depends(get_shipping_admin)]
+SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
+StaffServiceDep = Annotated[StaffService, Depends(get_staff_service)]
+AnalyticsDep = Annotated[AnalyticsService, Depends(get_analytics)]
+
+CustomersReaderDep = Annotated[Principal, Depends(require_permission(Permission.CUSTOMERS_READ))]
+CustomersWriterDep = Annotated[Actor, Depends(staff_actor(Permission.CUSTOMERS_WRITE))]
+DiscountsWriterDep = Annotated[Actor, Depends(staff_actor(Permission.DISCOUNTS_WRITE))]
+SettingsManagerDep = Annotated[Actor, Depends(staff_actor(Permission.SETTINGS_MANAGE))]
+StaffManagerDep = Annotated[Actor, Depends(staff_actor(Permission.STAFF_MANAGE))]
+AuditReaderDep = Annotated[Principal, Depends(require_permission(Permission.AUDIT_READ))]
+ReportsReaderDep = Annotated[Principal, Depends(require_permission(Permission.REPORTS_READ))]

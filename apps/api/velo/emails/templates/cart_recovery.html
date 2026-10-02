@@ -1,0 +1,8 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+{% if step == 1 %}<p style="margin:0 0 16px 0;">You left something in your cart{% if first_name %}, {{ first_name }}{% endif %}. It is saved for you.</p>
+{% elif step == 2 %}<p style="margin:0 0 16px 0;">Still thinking it over? Your cart is waiting.</p>
+{% else %}<p style="margin:0 0 16px 0;">A last reminder: your cart is still saved, but we cannot hold the stock for long.</p>{% endif %}
+{{ m.lines_table(lines) }}
+{{ m.button(cart_url, "Return to your cart") }}
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">Confirm this is your email address, so we can reach you about your orders.</p>
+{{ m.button(verify_url, "Confirm my email") }}
+<p style="margin:0;font-size:14px;color:#475569;">The link expires in 24 hours. If you did not create an account, ignore this email.</p>
+{% endblock %}

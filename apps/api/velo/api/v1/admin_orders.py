@@ -101,10 +101,17 @@ async def list_orders(
     ] = None,
     placed_from: datetime | None = None,
     placed_to: datetime | None = None,
+    min_total: Annotated[int | None, Query(ge=0, description="Minor units, inclusive.")] = None,
+    max_total: Annotated[int | None, Query(ge=0, description="Minor units, inclusive.")] = None,
+    needs_attention: Annotated[
+        bool | None, Query(description="Stock shortfalls and open disputes only (or none).")
+    ] = None,
+    sort: Literal["newest", "oldest"] = "newest",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     cursor: str | None = None,
 ) -> CursorPage[AdminOrderSummaryView]:
-    after = decode_cursor(cursor, "admin-orders") if cursor else None
+    tag = f"admin-orders-{sort}"
+    after = decode_cursor(cursor, tag) if cursor else None
     views, has_more, total, last = await reader.search(
         OrderFilters(
             status=status,
@@ -113,6 +120,10 @@ async def list_orders(
             query=q,
             placed_from=placed_from,
             placed_to=placed_to,
+            min_total=min_total,
+            max_total=max_total,
+            needs_attention=needs_attention,
+            oldest_first=sort == "oldest",
         ),
         limit=limit,
         after=after,
@@ -120,9 +131,7 @@ async def list_orders(
     return CursorPage[AdminOrderSummaryView](
         data=views,
         pagination=PaginationInfo(
-            next_cursor=encode_cursor("admin-orders", last.placed_at, last.id)
-            if has_more and last
-            else None,
+            next_cursor=encode_cursor(tag, last.placed_at, last.id) if has_more and last else None,
             has_more=has_more,
             limit=limit,
             total_count=total,
@@ -324,7 +333,9 @@ async def list_returns(
     cursor: str | None = None,
 ) -> CursorPage[ReturnView]:
     after = decode_cursor(cursor, "returns") if cursor else None
-    views, has_more, last = await reader.list_returns(status=status, limit=limit, after=after)
+    views, has_more, last, total = await reader.list_returns(
+        status=status, limit=limit, after=after
+    )
     return CursorPage[ReturnView](
         data=views,
         pagination=PaginationInfo(
@@ -333,6 +344,7 @@ async def list_returns(
             else None,
             has_more=has_more,
             limit=limit,
+            total_count=total,
         ),
     )
 

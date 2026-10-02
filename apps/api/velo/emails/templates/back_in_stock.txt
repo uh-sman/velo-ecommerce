@@ -1,0 +1,6 @@
+{{ product_title }}{% if variant_title %} ({{ variant_title }}){% endif %} is back in stock.
+
+You asked us to tell you. We only send this once - stock can go quickly:
+{{ product_url }}
+
+{{ texts.signature }}

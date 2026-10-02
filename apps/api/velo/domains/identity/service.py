@@ -54,6 +54,9 @@ from velo.domains.identity.repository import (
     UserRecord,
     UserRepository,
 )
+from velo.domains.platform.events import record_event
+from velo.domains.platform.settings import SettingsService
+from velo.emails.render import render
 
 logger = get_logger(__name__)
 
@@ -197,6 +200,14 @@ class AuthService:
             raise EmailTakenError() from exc
 
         issued = await self._start_session(user, client)
+        # The welcome email goes through the outbox: sent by the worker, once.
+        record_event(
+            self._session,
+            "user",
+            user.id,
+            "user.registered",
+            {"email": user.email, "first_name": first_name},
+        )
         await self._session.commit()
         logger.info("user_registered", user_id=str(user.id))
 
@@ -457,17 +468,18 @@ class AuthService:
         token = encode_token(
             "verify_email", user.id, self._secret, VERIFY_EMAIL_TTL, fp=fingerprint(user.email)
         )
+        await self._templated(
+            "verify_email",
+            user.email,
+            {"verify_url": f"{self._settings.storefront_url}/verify-email?token={token}"},
+        )
+
+    async def _templated(self, kind: str, to: str, context: dict[str, Any]) -> None:
+        """An account email from its template (ADR-011), sent inline: the link is in it."""
+        values = await SettingsService(self._session, self._settings).all()
+        rendered = render(kind, context, store=values["store"], texts=values["emails"])
         await self._mailer.send(
-            EmailMessage(
-                to=user.email,
-                subject="Confirm your email address",
-                text=(
-                    "Welcome to Velo. Confirm your email address to finish setting up your "
-                    f"account:\n\n{self._settings.storefront_url}/verify-email?token={token}\n\n"
-                    "The link works once and expires in 24 hours. If you did not create an "
-                    "account, ignore this email."
-                ),
-            )
+            EmailMessage(to=to, subject=rendered.subject, text=rendered.text, html=rendered.html)
         )
 
     async def verify_email(self, token: str, client: ClientInfo) -> UserRecord:
@@ -511,18 +523,10 @@ class AuthService:
             PASSWORD_RESET_TTL,
             fp=fingerprint(user.password_hash or ""),
         )
-        await self._mailer.send(
-            EmailMessage(
-                to=user.email,
-                subject="Reset your Velo password",
-                text=(
-                    "Someone asked to reset the password for this Velo account. If it was "
-                    f"you, choose a new password here:\n\n{self._settings.storefront_url}"
-                    f"/reset-password?token={token}\n\nThe link works once and expires in "
-                    "one hour. If it was not you, ignore this email: your password has not "
-                    "changed."
-                ),
-            )
+        await self._templated(
+            "password_reset",
+            user.email,
+            {"reset_url": f"{self._settings.storefront_url}/reset-password?token={token}"},
         )
 
     async def reset_password(self, token: str, new_password: str, client: ClientInfo) -> None:

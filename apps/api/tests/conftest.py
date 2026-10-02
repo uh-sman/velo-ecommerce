@@ -7,6 +7,7 @@ deselected.
 
 from __future__ import annotations
 
+import base64
 import os
 from collections.abc import AsyncIterator, Iterator
 
@@ -32,6 +33,8 @@ TEST_ENV = {
     "VELO_MEILISEARCH_INDEX": "products_test",
     "VELO_OPS_ALERT_EMAIL": "ops@example.com",
     "VELO_TRACKING_WEBHOOK_SECRET": "tracking-webhook-secret",
+    # Svix secrets are base64 after the prefix; this one is a readable test phrase.
+    "VELO_RESEND_WEBHOOK_SECRET": "whsec_" + base64.b64encode(b"svix-test-secret").decode(),
 }
 
 

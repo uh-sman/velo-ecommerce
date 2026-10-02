@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/account/wishlist", label: "Wishlist" },
   { href: "/account", label: "Details" },
   { href: "/account/addresses", label: "Addresses" },
+  { href: "/account/preferences", label: "Email preferences" },
   { href: "/account/sessions", label: "Sessions" },
 ];
 

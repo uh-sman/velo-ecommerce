@@ -254,6 +254,7 @@ async def worker_ctx(live_app: FastAPI, mailer: InMemoryMailer) -> AsyncIterator
     settings = get_settings()
     worker = Worker(settings)
     worker.mailer = mailer
+    worker.transport = mailer  # customer email too: one outbox to assert on
     ctx: dict[str, Any] = {"worker": worker, "redis": FakeArqRedis()}
     try:
         async with session_scope() as session:

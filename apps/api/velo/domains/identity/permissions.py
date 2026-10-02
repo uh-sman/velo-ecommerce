@@ -32,6 +32,7 @@ class Permission(StrEnum):
     REPORTS_READ = "reports:read"
     STAFF_MANAGE = "staff:manage"
     SETTINGS_MANAGE = "settings:manage"
+    AUDIT_READ = "audit:read"  # who did what, across the whole admin
 
 
 _FULFILMENT = frozenset(
@@ -48,7 +49,7 @@ _STAFF = _FULFILMENT | {
     Permission.CUSTOMERS_READ,
     Permission.REPORTS_READ,
 }
-_ADMIN = _STAFF | {Permission.ORDERS_REFUND, Permission.CUSTOMERS_WRITE}
+_ADMIN = _STAFF | {Permission.ORDERS_REFUND, Permission.CUSTOMERS_WRITE, Permission.AUDIT_READ}
 _OWNER = frozenset(Permission)
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {

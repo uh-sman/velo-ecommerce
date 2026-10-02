@@ -1,0 +1,5 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">Order <strong>{{ order_number }}</strong> has been cancelled {% if by_customer %}as you asked{% else %}by our team{% endif %}.</p>
+<p style="margin:0;font-size:14px;color:#475569;">Anything you paid is being refunded to your original payment method. You will get a separate email when the refund is issued.</p>
+{% endblock %}

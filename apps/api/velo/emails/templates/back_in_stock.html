@@ -1,0 +1,6 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;"><strong>{{ product_title }}</strong>{% if variant_title %} ({{ variant_title }}){% endif %} is back in stock.</p>
+<p style="margin:0;font-size:14px;color:#475569;">You asked us to tell you. We only send this once — stock can go quickly.</p>
+{{ m.button(product_url, "See it now") }}
+{% endblock %}

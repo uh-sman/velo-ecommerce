@@ -91,6 +91,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # API version to decide whether to kill a container.
     app.include_router(health.router)
     app.include_router(api_router, prefix=settings.api_prefix)
+    if settings.env == "development":
+        # Email previews and other tools that must never exist in production.
+        from velo.api.v1 import dev
+
+        app.include_router(dev.router, prefix=settings.api_prefix)
 
     return app
 

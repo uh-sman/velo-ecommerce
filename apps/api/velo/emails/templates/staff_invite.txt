@@ -1,0 +1,7 @@
+{{ inviter }} has invited you to help run {{ store.name }}, as {{ role }}.
+
+Accept here - the link works once and expires in 7 days:
+
+{{ invite_url }}
+
+If you were not expecting this, ignore this email.

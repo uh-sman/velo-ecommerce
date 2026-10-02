@@ -77,6 +77,9 @@ class ReturnLineView(BaseModel):
     quantity: int
     condition: str | None
     restock: bool
+    product_title: str
+    variant_title: str
+    sku: str
 
 
 class ReturnView(BaseModel):
@@ -89,6 +92,7 @@ class ReturnView(BaseModel):
     refund_amount: MoneyJson | None
     created_at: datetime
     lines: list[ReturnLineView]
+    order_id: uuid.UUID
     order_number: str | None = None
 
 
@@ -163,6 +167,7 @@ class OrderEventView(BaseModel):
     actor_id: uuid.UUID | None
     payload: dict[str, Any]
     created_at: datetime
+    actor_email: str | None = None
 
 
 class AdminOrderSummaryView(OrderSummaryView):
@@ -172,8 +177,15 @@ class AdminOrderSummaryView(OrderSummaryView):
     needs_attention: bool
 
 
+class PaymentReferenceView(BaseModel):
+    provider: str
+    intent_id: str | None  # to find the payment in the provider's dashboard
+    charge_id: str | None
+
+
 class AdminOrderView(OrderView):
     id: uuid.UUID
+    payment_reference: PaymentReferenceView | None
     user_id: uuid.UUID | None
     internal_note: str | None
     customer_note: str | None

@@ -1,0 +1,12 @@
+{{ texts.order_shipped_intro }} Order {{ order_number }}:
+
+{% for line in lines %}  {{ line.quantity }} x {{ line.title }}{% if line.variant %} ({{ line.variant }}){% endif %}
+{% endfor %}{% if tracking_number %}
+Tracking with {{ carrier or "the carrier" }}: {{ tracking_number }}{% endif %}{% if tracking_url %}
+{{ tracking_url }}{% endif %}{% if not complete %}
+
+The rest of your order follows separately.{% endif %}
+
+Your order: {{ order_url }}
+
+{{ texts.signature }}

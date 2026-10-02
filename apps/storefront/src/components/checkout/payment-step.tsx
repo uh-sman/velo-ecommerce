@@ -130,7 +130,9 @@ export function PaymentStep({
   return (
     <div className="flex flex-col gap-5">
       <Review checkout={checkout} intent={intent} />
-      {intent.provider === "paystack" ? (
+      {intent.provider === "sandbox" ? (
+        <SandboxPayment intent={intent} checkoutId={checkout.id} />
+      ) : intent.provider === "paystack" ? (
         <PaystackPayment intent={intent} checkoutId={checkout.id} />
       ) : (
         <StripePayment intent={intent} checkoutId={checkout.id} />
@@ -333,6 +335,74 @@ function PaystackPayment({ intent, checkoutId }: { intent: Intent; checkoutId: s
 
   return (
     <div className="flex flex-col gap-4">
+      {message && <FormAlert title="Payment not completed">{message}</FormAlert>}
+      <Button size="xl" loading={paying} onClick={() => void pay()}>
+        Pay {formatMoney(intent.amount)}
+      </Button>
+      <TrustRow />
+    </div>
+  );
+}
+
+// ── Sandbox (development and E2E only) ─────────────────────────────────────
+
+/*
+ * The API's sandbox provider (payments/sandbox.py) stands in for Stripe when
+ * VELO_PAYMENT_SANDBOX is on. There is still no card field on our origin: the
+ * shopper picks one of Stripe's well-known test cards, and only the outcome
+ * it stands for is sent. The result travels the real webhook path, so the
+ * confirmation page waits for the order exactly as it does with Stripe.
+ */
+const SANDBOX_CARDS = [
+  { outcome: "succeed", label: "Test card 4242 4242 4242 4242 — succeeds" },
+  { outcome: "decline", label: "Test card 4000 0000 0000 0002 — declined" },
+] as const;
+
+function SandboxPayment({ intent, checkoutId }: { intent: Intent; checkoutId: string }) {
+  const router = useRouter();
+  const [outcome, setOutcome] = useState<"succeed" | "decline">("succeed");
+  const [paying, setPaying] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function pay() {
+    setPaying(true);
+    setMessage(null);
+    const result = await callApi((client) =>
+      client.POST("/api/v1/sandbox/confirm", {
+        body: { client_secret: intent.client_secret, outcome },
+      }),
+    );
+    if (result.ok && result.data.status === "succeeded") {
+      router.push(`/checkout/confirmation?checkout=${checkoutId}`);
+      return;
+    }
+    setPaying(false);
+    setMessage(
+      result.ok
+        ? (result.data.failure_message ?? "Your card was declined.")
+        : "We could not complete the payment. You have not been charged — please try again.",
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <fieldset className="flex flex-col gap-2 rounded-md border border-dashed p-4">
+        <legend className="px-1 text-sm font-semibold">Sandbox payment — no real money</legend>
+        {SANDBOX_CARDS.map((card) => (
+          <label key={card.outcome} className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="sandbox-card"
+              value={card.outcome}
+              checked={outcome === card.outcome}
+              onChange={() => {
+                setOutcome(card.outcome);
+              }}
+            />
+            {card.label}
+          </label>
+        ))}
+      </fieldset>
       {message && <FormAlert title="Payment not completed">{message}</FormAlert>}
       <Button size="xl" loading={paying} onClick={() => void pay()}>
         Pay {formatMoney(intent.amount)}

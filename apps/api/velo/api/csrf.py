@@ -38,7 +38,12 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._settings = settings
         self._api_prefix = settings.api_prefix
-        self._exempt_prefixes = (f"{settings.api_prefix}/webhooks/",)
+        # Signed-token endpoints: the token in the link is the credential, and a
+        # mail client's one-click unsubscribe cannot carry a CSRF header.
+        self._exempt_prefixes = (
+            f"{settings.api_prefix}/webhooks/",
+            f"{settings.api_prefix}/email/",
+        )
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]

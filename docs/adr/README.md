@@ -18,6 +18,7 @@ Every significant technology and structural decision in Velo Commerce is recorde
 | [008](008-jwt-in-httponly-cookies.md)      | JWT in httpOnly cookies                        | Accepted | 2026-09-20 |
 | [009](009-arq-over-celery.md)              | ARQ for background jobs                        | Accepted | 2026-09-20 |
 | [010](010-webhook-confirmed-orders.md)     | Orders confirmed by webhook, never by redirect | Accepted | 2026-09-20 |
+| [011](011-email-templates-in-jinja.md)     | Email templates in Jinja2, not React Email     | Accepted | 2026-10-02 |
 
 A one-line summary of all ten is in [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §10. This directory is the long form.
 

@@ -1,0 +1,6 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">Your order <strong>{{ order_number }}</strong> has been delivered. We hope you love it.</p>
+<p style="margin:0 0 16px 0;font-size:14px;color:#475569;">Not right? You have {{ return_window_days }} days to send it back — start a return from your order page.</p>
+{{ m.button(order_url, "View your order") }}
+{% endblock %}

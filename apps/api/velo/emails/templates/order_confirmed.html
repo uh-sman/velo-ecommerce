@@ -1,0 +1,9 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">{{ texts.order_confirmed_intro }}</p>
+<p style="margin:0 0 8px 0;font-size:14px;color:#475569;">Order <strong style="color:#0f172a;">{{ order_number }}</strong></p>
+{{ m.lines_table(lines) }}
+{{ m.total_row("Total", total) }}
+{{ m.button(order_url, "View your order") }}
+<p style="margin:0;font-size:14px;color:#475569;">Your invoice is attached. We will email you again when it ships.</p>
+{% endblock %}

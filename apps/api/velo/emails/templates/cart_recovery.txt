@@ -1,0 +1,9 @@
+{% if step == 1 %}You left something in your cart{% if first_name %}, {{ first_name }}{% endif %}. It is saved for you.{% elif step == 2 %}Still thinking it over? Your cart is waiting.{% else %}A last reminder: your cart is still saved, but we cannot hold the stock for long.{% endif %}
+
+{% for line in lines %}  {{ line.quantity }} x {{ line.title }}{% if line.variant %} ({{ line.variant }}){% endif %}
+{% endfor %}
+Return to your cart: {{ cart_url }}
+
+{{ texts.signature }}
+
+Unsubscribe from cart reminders: {{ unsubscribe_url }}

@@ -15,6 +15,7 @@ from velo.core.config import Settings
 from velo.domains.payments.exceptions import PaymentsUnavailableError
 from velo.domains.payments.paystack import PaystackProvider
 from velo.domains.payments.provider import PaymentProvider
+from velo.domains.payments.sandbox import SandboxProvider
 from velo.domains.payments.stripe import StripeProvider
 
 
@@ -68,6 +69,12 @@ def build_providers(
             api_base=settings.paystack_api_base,
             transport=transport,
         )
+    if settings.payment_sandbox and not settings.is_production:
+        from velo.db.redis import get_redis
+
+        # Signed with a key derived from the app secret: only this process mints its events.
+        secret = f"sandbox:{settings.secret_key.get_secret_value()}"
+        providers["sandbox"] = SandboxProvider(get_redis, secret=secret)
     return PaymentProviders(
         providers,
         default=settings.payment_default_provider,

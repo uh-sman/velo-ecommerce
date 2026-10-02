@@ -1,4 +1,8 @@
 import type { Metadata, Viewport } from "next";
+
+import { ThemeScript } from "@/components/theme-script";
+import { Toaster } from "@/components/ui/sonner";
+
 import { fontVariables } from "./fonts";
 import "./globals.css";
 
@@ -16,11 +20,15 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={fontVariables} suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+      </head>
       <body className="min-h-dvh antialiased">
-        <a href="#main" className="sr-only focus:not-sr-only">
+        <a href="#main" className="skip-link">
           Skip to content
         </a>
-        <main id="main">{children}</main>
+        {children}
+        <Toaster />
       </body>
     </html>
   );

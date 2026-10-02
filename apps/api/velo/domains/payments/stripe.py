@@ -208,7 +208,11 @@ class StripeProvider:
             raise SignatureError("signed body is not JSON") from exc
         if not isinstance(payload, dict) or "id" not in payload or "type" not in payload:
             raise SignatureError("signed body is not an event")
-        return self.parse_event(payload)
+        try:
+            return self.parse_event(payload)
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            # Stripe never sends these; refusing beats storing an event that can only fail.
+            raise SignatureError("signed body is not a well-formed event") from exc
 
     def parse_event(self, payload: dict[str, Any]) -> WebhookEvent:
         event_type = str(payload["type"])

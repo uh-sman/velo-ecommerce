@@ -1,0 +1,7 @@
+Welcome{% if first_name %}, {{ first_name }}{% endif %}.
+
+Your account keeps your orders, addresses and wishlist in one place. Free shipping starts at $75, and every order has 30 days to return.
+
+{{ shop_url }}
+
+{{ texts.signature }}

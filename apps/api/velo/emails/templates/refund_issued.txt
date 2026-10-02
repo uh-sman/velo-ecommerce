@@ -1,0 +1,5 @@
+We have refunded {{ amount }} for order {{ order_number }}.
+
+It usually reaches your account within 5 to 10 working days, depending on your bank.
+
+{{ texts.signature }}

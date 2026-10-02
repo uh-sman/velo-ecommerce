@@ -579,6 +579,13 @@ async def test_admin_order_search_by_number_email_and_sku(
     assert none.json()["data"] == []
     paid_only = await admin.get("/api/v1/admin/orders", params={"status": "cancelled"})
     assert paid_only.json()["data"] == []
+    # By value, inclusive at both ends (one lamp: 5962).
+    in_range = await admin.get(
+        "/api/v1/admin/orders", params={"min_total": 5962, "max_total": 5962}
+    )
+    assert len(in_range.json()["data"]) == 1
+    above = await admin.get("/api/v1/admin/orders", params={"min_total": 5963})
+    assert above.json()["data"] == []
 
 
 async def test_invoice_and_packing_slip_are_pdfs(
@@ -690,3 +697,41 @@ async def test_the_confirmation_email_carries_the_invoice(
     (invoice,) = confirmation.attachments
     assert invoice.filename == f"invoice-{order['number']}.pdf"
     assert invoice.content.startswith(b"%PDF")
+
+
+async def test_admin_lists_carry_what_the_screens_need(
+    browser: Browser,
+    admin: Browser,
+    stripe: FakeStripe,
+    providers: PaymentProviders,
+    lamp: dict[str, Any],
+) -> None:
+    first = await place(browser, stripe, providers, lamp, quantity=1)
+    second = await place(browser, stripe, providers, lamp, quantity=1)
+    oldest = await admin.get("/api/v1/admin/orders", params={"sort": "oldest"})
+    assert [o["number"] for o in oldest.json()["data"]] == [first["number"], second["number"]]
+
+    await sql(
+        "UPDATE orders SET metadata = jsonb_build_object('attention', 'shortfall') "
+        "WHERE order_number = :n",
+        n=second["number"],
+    )
+    flagged = await admin.get("/api/v1/admin/orders", params={"needs_attention": "true"})
+    assert [o["number"] for o in flagged.json()["data"]] == [second["number"]]
+
+    await admin.post(f"/api/v1/admin/orders/{first['id']}/fulfilments", json={})
+    await browser.post(
+        f"/api/v1/orders/{first['number']}/returns?token={first['access_token']}",
+        json={"items": [{"order_item_id": line_id(first), "quantity": 1}], "reason": "other"},
+    )
+    queue = (await admin.get("/api/v1/admin/returns")).json()
+    assert queue["pagination"]["total_count"] == 1
+    (returned,) = queue["data"]
+    assert returned["order_id"] == first["id"]
+    assert returned["lines"][0]["product_title"] == "Desk Lamp"
+
+    detail = await admin_order(admin, first)
+    assert detail["payment_reference"]["intent_id"].startswith("pi_")
+    staff_events = [e for e in detail["events"] if e["actor_type"] == "staff"]
+    assert staff_events and staff_events[0]["actor_email"] == "admin@example.com"
+    assert (await admin.get("/api/v1/admin/me")).json()["store_currency"] == "USD"

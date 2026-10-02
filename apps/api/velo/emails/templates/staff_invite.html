@@ -1,0 +1,6 @@
+{% extends "_layout.html" %}{% import "_macros.html" as m %}
+{% block body %}
+<p style="margin:0 0 16px 0;">{{ inviter }} has invited you to help run {{ store.name }}, as <strong>{{ role }}</strong>.</p>
+{{ m.button(invite_url, "Accept the invitation") }}
+<p style="margin:0;font-size:14px;color:#475569;">The link works once and expires in 7 days. If you were not expecting this, ignore this email.</p>
+{% endblock %}

@@ -1,0 +1,6 @@
+Your card was declined, so we have not taken any money and your order has not been placed.
+
+Your cart is saved and the items are held for a little while. You can try another card or payment method:
+{{ cart_url }}
+
+{{ texts.signature }}

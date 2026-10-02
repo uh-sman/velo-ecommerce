@@ -1,0 +1,13 @@
+{{ texts.order_confirmed_intro }}
+
+Order {{ order_number }}
+
+{% for line in lines %}  {{ line.quantity }} x {{ line.title }}{% if line.variant %} ({{ line.variant }}){% endif %}{% if line.amount %} - {{ line.amount }}{% endif %}
+{% endfor %}
+Total: {{ total }}
+
+View your order: {{ order_url }}
+
+Your invoice is attached. We will email you again when it ships.
+
+{{ texts.signature }}
