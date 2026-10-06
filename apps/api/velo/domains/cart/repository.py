@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import column, delete, func, select, table, update
+from sqlalchemy import Integer, Uuid, column, delete, func, select, table, update, values
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -187,17 +187,28 @@ class CartRepository:
         await self._session.execute(delete(CartItem).where(CartItem.cart_id == cart_id))
 
     async def reduce(self, cart_id: uuid.UUID, quantities: Mapping[uuid.UUID, int]) -> None:
-        """Take these quantities off the cart's lines; a line reduced to nothing goes."""
-        for variant_id, quantity in quantities.items():
-            where = (CartItem.cart_id == cart_id, CartItem.variant_id == variant_id)
-            await self._session.execute(
-                delete(CartItem).where(*where, CartItem.quantity <= quantity)
-            )
-            await self._session.execute(
-                update(CartItem)
-                .where(*where)
-                .values(quantity=CartItem.quantity - quantity, updated_at=func.now())
-            )
+        """Take these quantities off the cart's lines; a line reduced to nothing goes.
+
+        Two statements for the whole order, joined to an inline VALUES list,
+        rather than two per line.
+        """
+        if not quantities:
+            return
+        bought = values(
+            column("variant_id", Uuid()), column("quantity", Integer()), name="bought"
+        ).data(list(quantities.items()))
+        where = (CartItem.cart_id == cart_id, CartItem.variant_id == bought.c.variant_id)
+        await self._session.execute(
+            delete(CartItem)
+            .where(*where, CartItem.quantity <= bought.c.quantity)
+            .execution_options(synchronize_session="fetch")
+        )
+        await self._session.execute(
+            update(CartItem)
+            .where(*where)
+            .values(quantity=CartItem.quantity - bought.c.quantity, updated_at=func.now())
+            .execution_options(synchronize_session="fetch")
+        )
 
     # ── Housekeeping ──────────────────────────────────────────────────────
 

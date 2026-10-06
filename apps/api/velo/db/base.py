@@ -54,7 +54,11 @@ class Base(DeclarativeBase):
 
 class HasId:
     id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True, default=uuid7, server_default=text("uuidv7()"), sort_order=-100
+        primary_key=True,
+        default=uuid7,
+        server_default=text("uuidv7()"),
+        sort_order=-100,
+        insert_sentinel=True,
     )
 
 

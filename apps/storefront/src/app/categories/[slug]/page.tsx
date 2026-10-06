@@ -5,9 +5,11 @@ import { cache } from "react";
 
 import { Listing } from "@/components/commerce/listing";
 import { FormAlert } from "@/components/forms/fields";
+import { JsonLd } from "@/components/seo/json-ld";
 import { publicClient } from "@/lib/api-server";
 import { brandOptions, loadListing } from "@/lib/catalog-server";
 import { readListing } from "@/lib/listing";
+import { breadcrumbList, SITE_NAME } from "@/lib/site";
 
 const getCategory = cache(async (slug: string) => {
   const { data, response } = await publicClient().GET("/api/v1/categories/{slug}", {
@@ -23,7 +25,17 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { data } = await getCategory((await params).slug);
-  return data ? { title: data.category.name } : {};
+  if (!data) return {};
+  const { name, slug } = data.category;
+  const description = `Shop ${name} at ${SITE_NAME}: free shipping over $75 and 30-day returns.`;
+  // Filtered and sorted views are the same page to a search engine.
+  const canonical = `/categories/${slug}`;
+  return {
+    title: name,
+    description,
+    alternates: { canonical },
+    openGraph: { siteName: SITE_NAME, title: name, description, url: canonical },
+  };
 }
 
 export default async function CategoryPage({
@@ -45,6 +57,11 @@ export default async function CategoryPage({
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10">
+      <JsonLd
+        data={breadcrumbList(
+          breadcrumbs.map((c) => ({ name: c.name, path: `/categories/${c.slug}` })),
+        )}
+      />
       <nav aria-label="Breadcrumb">
         <ol className="text-text-secondary flex flex-wrap items-center gap-1 text-sm">
           <li>

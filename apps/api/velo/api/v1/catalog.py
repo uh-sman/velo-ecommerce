@@ -37,7 +37,8 @@ router = APIRouter(tags=["catalog"])
 Limit = Annotated[int, Query(ge=1, le=MAX_LIMIT)]
 Sort = Literal["newest", "price", "-price", "rating"]
 # Browsers and CDNs may keep public catalog reads briefly; the API's own cache
-# is invalidated on write, this only saves round trips.
+# is invalidated on write, this only saves round trips. Every GET here sets it,
+# and once stale they revalidate with the ETag (velo.api.conditional).
 PUBLIC_CACHE = "public, max-age=30, stale-while-revalidate=60"
 
 
@@ -105,7 +106,10 @@ async def get_product(slug: str, service: CatalogServiceDep, response: Response)
 @router.get(
     "/products/{slug}/related", response_model=list[ProductCard], summary="Related products"
 )
-async def related_products(slug: str, service: CatalogServiceDep) -> list[ProductCard]:
+async def related_products(
+    slug: str, service: CatalogServiceDep, response: Response
+) -> list[ProductCard]:
+    response.headers["Cache-Control"] = PUBLIC_CACHE
     return await service.related(slug)
 
 
@@ -115,9 +119,11 @@ async def related_products(slug: str, service: CatalogServiceDep) -> list[Produc
 async def list_reviews(
     slug: str,
     service: ReviewServiceDep,
+    response: Response,
     limit: Limit = 10,
     cursor: str | None = None,
 ) -> CursorPage[ReviewView]:
+    response.headers["Cache-Control"] = PUBLIC_CACHE
     return await service.approved(slug, limit=limit, cursor=cursor)
 
 
@@ -126,7 +132,8 @@ async def list_reviews(
     response_model=ReviewSummary,
     summary="Average, count, and how many reviews gave each star",
 )
-async def review_summary(slug: str, service: ReviewServiceDep) -> ReviewSummary:
+async def review_summary(slug: str, service: ReviewServiceDep, response: Response) -> ReviewSummary:
+    response.headers["Cache-Control"] = PUBLIC_CACHE
     return await service.summary(slug)
 
 
@@ -180,10 +187,12 @@ async def list_collections(service: CatalogServiceDep, response: Response) -> li
 async def get_collection(
     slug: str,
     service: CatalogServiceDep,
+    response: Response,
     sort: Sort = "newest",
     limit: Limit = DEFAULT_LIMIT,
     cursor: str | None = None,
 ) -> CollectionPage:
+    response.headers["Cache-Control"] = PUBLIC_CACHE
     collection = await service.collection(slug)
     products = await service.list_products(
         _listing(collection=slug, sort=sort, limit=limit, cursor=cursor)
@@ -205,6 +214,7 @@ async def category_tree(service: CatalogServiceDep, response: Response) -> list[
 async def get_category(
     slug: str,
     service: CatalogServiceDep,
+    response: Response,
     brand: Annotated[list[str] | None, Query()] = None,
     min_price: Annotated[int | None, Query(ge=0)] = None,
     max_price: Annotated[int | None, Query(ge=0)] = None,
@@ -213,6 +223,7 @@ async def get_category(
     limit: Limit = DEFAULT_LIMIT,
     cursor: str | None = None,
 ) -> CategoryPage:
+    response.headers["Cache-Control"] = PUBLIC_CACHE
     category, breadcrumbs, children = await service.category(slug)
     products = await service.list_products(
         _listing(

@@ -28,7 +28,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import column, func, or_, select, table, update
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from velo.core.logging import get_logger
@@ -40,7 +40,9 @@ logger = get_logger(__name__)
 
 # Other domains' tables, read-only: how many paid orders a customer has, the
 # account facts segments depend on, and the checkouts holding a redemption.
-_orders = table("orders", column("user_id"), column("email"), column("status"))
+# email is typed: an untyped column binds as VARCHAR, and ``citext = varchar``
+# compares as text — case-sensitive, and blind to idx_orders_email.
+_orders = table("orders", column("user_id"), column("email", CITEXT), column("status"))
 _users = table("users", column("id"), column("role"), column("marketing_opt_in"))
 _checkouts = table("checkout_sessions", column("id"), column("status"), column("snapshot", JSONB))
 PAID_STATUSES = (

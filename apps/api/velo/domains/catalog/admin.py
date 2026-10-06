@@ -207,12 +207,8 @@ class CatalogAdminService:
             if product.category_id
             else None
         )
-        stock: dict[uuid.UUID, Any] = {}
-        for variant in variants:
-            try:
-                stock[variant.id] = await self._inventory.stock(variant.id)
-            except NotFoundError:
-                stock[variant.id] = None
+        found = await self._inventory.stocks([variant.id for variant in variants])
+        stock: dict[uuid.UUID, Any] = {variant.id: found.get(variant.id) for variant in variants}
         return AdminProductView(
             id=product.id,
             slug=product.slug,

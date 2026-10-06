@@ -22,6 +22,9 @@ import httpx
 
 from velo.core.config import Settings
 from velo.core.email import EmailMessage
+from velo.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class TransportError(Exception):
@@ -135,3 +138,36 @@ def build_transport(settings: Settings) -> Transport:
     if settings.resend_api_key.get_secret_value():
         return ResendTransport(settings)
     return SmtpTransport(settings)
+
+
+class TransportMailer:
+    """The request path's :class:`~velo.core.email.Mailer` over the configured transport.
+
+    Account emails that carry a short-lived credential (password reset, lockout,
+    staff invites) are sent inline, and must go out the same way as everything
+    else — through Resend in production, not to an SMTP host that is not there.
+    A failure is logged and swallowed, as the Mailer protocol requires.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    async def send(self, message: EmailMessage) -> str | None:
+        try:
+            provider_id = await self._transport.send(message)
+        except TransportError:
+            # The subject names the kind of email; the address is not logged.
+            logger.warning(
+                "email_send_failed",
+                subject=message.subject,
+                transport=self._transport.name,
+                exc_info=True,
+            )
+            return None
+        logger.info("email_sent", subject=message.subject, transport=self._transport.name)
+        return provider_id
+
+    async def aclose(self) -> None:
+        close = getattr(self._transport, "aclose", None)
+        if close is not None:
+            await close()

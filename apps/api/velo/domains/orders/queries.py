@@ -293,7 +293,9 @@ class OrderReader:
         orders, has_more, _ = await self._orders.search(
             OrderFilters(user_id=user_id), limit=limit, after=after
         )
-        return [await self._summary(o) for o in orders], has_more, orders[-1] if orders else None
+        units = await self._orders.unit_counts([o.id for o in orders])
+        summaries = [self._summary(o, units.get(o.id, 0)) for o in orders]
+        return summaries, has_more, orders[-1] if orders else None
 
     async def search(
         self,
@@ -305,9 +307,10 @@ class OrderReader:
         orders, has_more, total = await self._orders.search(
             filters, limit=limit, after=after, count=True
         )
+        units = await self._orders.unit_counts([o.id for o in orders])
         views = []
         for order in orders:
-            summary = await self._summary(order)
+            summary = self._summary(order, units.get(order.id, 0))
             address = order.shipping_address
             name = " ".join(filter(None, [address.get("first_name"), address.get("last_name")]))
             views.append(
@@ -324,8 +327,9 @@ class OrderReader:
             )
         return views, has_more, total, orders[-1] if orders else None
 
-    async def _summary(self, order: OrderRecord) -> OrderSummaryView:
-        items = await self._orders.items(order.id)
+    @staticmethod
+    def _summary(order: OrderRecord, units: int) -> OrderSummaryView:
+        """One line of an order list. ``units`` comes from one query for the whole page."""
         return OrderSummaryView(
             number=order.order_number,
             status=order.status,
@@ -333,7 +337,7 @@ class OrderReader:
             fulfilment_status=order.fulfilment_status,
             placed_at=order.placed_at,
             total=_money(order.total_amount, order.currency),
-            item_count=sum(item.quantity for item in items),
+            item_count=units,
         )
 
     # ── For documents ─────────────────────────────────────────────────────
@@ -359,11 +363,13 @@ class OrderReader:
         found, has_more, total = await self._orders.list_returns(
             status=status, limit=limit, after=after
         )
-        views = []
-        for returned in found:
-            order = await self._orders.get(returned.order_id)
-            assert order is not None
-            views.append(return_view(returned, order.currency, order.order_number))
+        orders = await self._orders.get_many([returned.order_id for returned in found])
+        views = [
+            return_view(
+                returned, orders[returned.order_id].currency, orders[returned.order_id].order_number
+            )
+            for returned in found
+        ]
         return views, has_more, found[-1] if found else None, total
 
     async def payment_label(self, order: OrderRecord) -> str | None:

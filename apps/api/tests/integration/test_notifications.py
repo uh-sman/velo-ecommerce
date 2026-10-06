@@ -113,8 +113,9 @@ async def test_a_new_account_gets_one_welcome_email(
     await drain(worker_ctx)
     welcomes = [m for m in mailer.outbox if m.subject.startswith("Welcome to")]
     assert [m.to for m in welcomes] == ["welcome@example.com"]
-    verify = [m for m in mailer.outbox if m.subject == "Confirm your email address"]
-    assert verify and verify[0].html and "/verify-email?token=" in verify[0].text
+    # sign_in_as verifies the address before the relay runs, so the queued
+    # verification email is dropped (test_auth.py covers it being sent).
+    assert not [m for m in mailer.outbox if m.subject == "Confirm your email address"]
 
 
 # ── Abandoned carts ───────────────────────────────────────────────────────────

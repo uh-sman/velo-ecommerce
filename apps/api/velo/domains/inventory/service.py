@@ -133,6 +133,10 @@ class InventoryService:
             raise NotFoundError("No stock record for that variant.")
         return record
 
+    async def stocks(self, variant_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, StockRecord]:
+        """Stock records for several variants in one query; a variant without one is absent."""
+        return await self._stock.stock(variant_ids)
+
     async def list_stock(
         self,
         *,
@@ -356,9 +360,10 @@ class InventoryService:
                 held.append((variant_id, quantity))
         if shortfalls:
             raise OutOfStockError(shortfalls)
-        for variant_id, quantity in held:
-            await self._stock.add_reservation(variant_id, session_id, quantity, expires_at)
-            await self._stock.add_reserved(variant_id, quantity)
+        # Two statements for the whole checkout, not two per line: these rows
+        # stay locked until the transaction ends.
+        await self._stock.add_reservations(session_id, held, expires_at)
+        await self._stock.add_reserved_many(dict(held))
 
     async def extend(self, session_id: uuid.UUID, expires_at: datetime) -> None:
         await self._stock.extend_reservations(session_id, expires_at)
@@ -367,8 +372,12 @@ class InventoryService:
         """Give a checkout's held stock back. Returns how many reservations it had."""
         await self._stock.lock_many(await self._stock.reserved_variants(session_id))
         reservations = await self._stock.active_reservations(session_id)
+        deltas: dict[uuid.UUID, int] = {}
         for reservation in reservations:
-            await self._stock.add_reserved(reservation.variant_id, -reservation.quantity)
+            deltas[reservation.variant_id] = deltas.get(reservation.variant_id, 0) - (
+                reservation.quantity
+            )
+        await self._stock.add_reserved_many(deltas)
         await self._stock.set_reservation_status([r.id for r in reservations], status)
         return len(reservations)
 
@@ -394,6 +403,8 @@ class InventoryService:
             )
 
         shortfalls: list[Shortfall] = []
+        changes: dict[uuid.UUID, tuple[int, int]] = {}
+        sold: dict[uuid.UUID, int] = {}
         for variant_id in variant_ids:
             record = stock.get(variant_id)
             wanted = quantities.get(variant_id, 0)
@@ -413,22 +424,30 @@ class InventoryService:
                 shortfalls.append(Shortfall(variant_id, wanted, taken))
             if not taken and variant_id not in ours:
                 continue
-            after = await self._stock.update(
-                variant_id,
-                quantity_on_hand=record.quantity_on_hand - taken,
-                quantity_reserved=others,
-            )
+            changes[variant_id] = (record.quantity_on_hand - taken, others)
             if taken:
-                await self._stock.add_movement(
-                    variant_id=variant_id,
-                    quantity_delta=-taken,
-                    reason="sale",
-                    reference_type="order",
-                    reference_id=order_id,
-                )
-                label = await self._stock.variant_label(variant_id)
-                if label is not None:
-                    self._announce(label, record, after)
+                sold[variant_id] = taken
+
+        # One statement each for the stock rows, the ledger and the labels,
+        # however many lines the order has: the rows stay locked meanwhile.
+        after = await self._stock.update_many(changes)
+        await self._stock.add_movements(
+            [
+                {
+                    "variant_id": variant_id,
+                    "quantity_delta": -taken,
+                    "reason": "sale",
+                    "reference_type": "order",
+                    "reference_id": order_id,
+                }
+                for variant_id, taken in sold.items()
+            ]
+        )
+        labels = await self._stock.variant_labels(list(sold))
+        for variant_id in sold:
+            label = labels.get(variant_id)
+            if label is not None:
+                self._announce(label, stock[variant_id], after[variant_id])
         await self._stock.set_reservation_status([r.id for r in reservations], "committed")
         return shortfalls
 

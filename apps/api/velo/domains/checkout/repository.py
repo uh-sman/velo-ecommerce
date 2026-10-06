@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import BindParameter, bindparam, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from velo.domains.checkout.models import CheckoutSession
@@ -104,9 +104,15 @@ class CheckoutRepository:
     async def expired(
         self, now: datetime, statuses: tuple[str, ...], limit: int
     ) -> list[uuid.UUID]:
+        # The statuses are rendered into the SQL, not bound: a partial index
+        # (idx_checkout_expiry) is usable only when the planner can see them,
+        # and a prepared statement's generic plan cannot.
+        listed: BindParameter[list[str]] = bindparam(
+            "statuses", list(statuses), expanding=True, literal_execute=True
+        )
         rows = await self._session.scalars(
             select(CheckoutSession.id)
-            .where(CheckoutSession.status.in_(statuses), CheckoutSession.expires_at < now)
+            .where(CheckoutSession.status.in_(listed), CheckoutSession.expires_at < now)
             .order_by(CheckoutSession.expires_at)
             .limit(limit)
         )

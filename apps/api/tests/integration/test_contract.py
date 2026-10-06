@@ -67,7 +67,10 @@ async def _sql(statement: str, **params: Any) -> None:
     await engine.dispose()
 
 
-@pytest.fixture(scope="session")
+# Module-scoped, not session: the teardown truncates and flushes Redis as soon as
+# this module is done. Session-scoped, the fuzzer's login attempts stayed in the
+# rate limiter and the next module's first sign-in was refused with a 429.
+@pytest.fixture(scope="module")
 def contract_server(
     migrated_database: str, tmp_path_factory: pytest.TempPathFactory
 ) -> Iterator[dict[str, str]]:
@@ -77,6 +80,7 @@ def contract_server(
         **os.environ,
         **TEST_ENV,
         "VELO_ACCESS_TOKEN_TTL_SECONDS": "7200",  # outlasts the run
+        "VELO_BREACH_CHECK_ENABLED": "false",
         "PYTHONUNBUFFERED": "1",
         # Generated paths hold any character; a cp1252 console would crash the logger.
         "PYTHONIOENCODING": "utf-8",
@@ -149,7 +153,7 @@ def contract_server(
         redis.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def contract_schema(contract_server: dict[str, str]) -> Any:
     return schemathesis.openapi.from_url(f"{contract_server['base']}/openapi.json")
 

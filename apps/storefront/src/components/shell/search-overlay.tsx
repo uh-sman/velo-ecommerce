@@ -2,7 +2,6 @@
 
 import { formatMoney, type Schema } from "@velo/api-client";
 import { ClockIcon, SearchIcon, XIcon } from "lucide-react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
@@ -10,6 +9,7 @@ import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/
 import { callApi } from "@/lib/api-browser";
 import { forget, recall, RECENT_SEARCHES, remember } from "@/lib/recent";
 import { cn } from "@/lib/utils";
+import { CatalogImage } from "@/components/commerce/catalog-image";
 
 type Card = Schema<"ProductCard">;
 type Option = { kind: "product"; card: Card } | { kind: "query"; text: string; recent: boolean };
@@ -199,13 +199,11 @@ export function SearchOverlay() {
                   <>
                     <span className="bg-surface-sunken relative size-10 shrink-0 overflow-hidden rounded">
                       {option.card.image && (
-                        <Image
-                          src={option.card.image.url}
+                        <CatalogImage
+                          media={option.card.image}
                           alt=""
-                          fill
                           sizes="40px"
                           className="object-cover"
-                          unoptimized
                         />
                       )}
                     </span>

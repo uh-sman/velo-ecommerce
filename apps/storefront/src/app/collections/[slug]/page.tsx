@@ -7,6 +7,7 @@ import { FormAlert } from "@/components/forms/fields";
 import { publicClient } from "@/lib/api-server";
 import { brandOptions, loadListing } from "@/lib/catalog-server";
 import { readListing } from "@/lib/listing";
+import { SITE_NAME } from "@/lib/site";
 
 const getCollection = cache(async (slug: string) => {
   const { data } = await publicClient().GET("/api/v1/collections/{slug}", {
@@ -22,12 +23,20 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const data = await getCollection((await params).slug);
-  return data
-    ? {
-        title: data.collection.title,
-        ...(data.collection.description ? { description: data.collection.description } : {}),
-      }
-    : {};
+  if (!data) return {};
+  const { title, description, slug } = data.collection;
+  const canonical = `/collections/${slug}`;
+  return {
+    title,
+    ...(description ? { description } : {}),
+    alternates: { canonical },
+    openGraph: {
+      siteName: SITE_NAME,
+      title,
+      url: canonical,
+      ...(description ? { description } : {}),
+    },
+  };
 }
 
 export default async function CollectionPage({

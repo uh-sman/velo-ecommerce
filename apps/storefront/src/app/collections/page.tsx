@@ -3,7 +3,10 @@ import Link from "next/link";
 
 import { getCollections } from "@/lib/api-server";
 
-export const metadata: Metadata = { title: "Collections" };
+export const metadata: Metadata = {
+  title: "Collections",
+  alternates: { canonical: "/collections" },
+};
 
 export default async function CollectionsPage() {
   const collections = await getCollections();

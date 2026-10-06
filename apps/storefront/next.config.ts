@@ -10,6 +10,14 @@ const config: NextConfig = {
   ...(process.env["NEXT_OUTPUT_STANDALONE"] === "1" && { output: "standalone" }),
   outputFileTracingRoot: path.join(__dirname, "../.."),
 
+  // `radix-ui` is one barrel over every primitive. Imported from a Server
+  // Component (Button's Slot), the whole barrel became a client boundary and
+  // shipped ~55 kB gzip to the home page; this rewrites it to per-primitive
+  // imports so only what is used is bundled (PLANNING.md Phase 14).
+  experimental: {
+    optimizePackageImports: ["radix-ui"],
+  },
+
   // Every image is served AVIF-first with a WebP fallback (DESIGN-SYSTEM.md §7).
   images: {
     formats: ["image/avif", "image/webp"],

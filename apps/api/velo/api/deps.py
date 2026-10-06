@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from velo.api.cookies import ACCESS_COOKIE, CART_COOKIE, CHECKOUT_COOKIE
 from velo.core.config import Settings, get_settings
-from velo.core.email import Mailer, SmtpMailer
+from velo.core.email import Mailer
 from velo.core.errors import ForbiddenError, UnauthenticatedError
 from velo.core.jobs import JobQueue, get_job_queue
 from velo.core.meili import MeiliClient
@@ -60,6 +60,7 @@ from velo.domains.platform.events import Actor
 from velo.domains.platform.settings import SettingsService
 from velo.domains.shipping.admin import ShippingAdminService
 from velo.domains.shipping.service import RulesTaxProvider, ShippingService
+from velo.emails.transport import TransportMailer, build_transport
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -72,8 +73,22 @@ def get_rate_limiter() -> RateLimiter:
     return RateLimiter(get_redis())
 
 
+_mailer: TransportMailer | None = None
+
+
 def get_mailer(settings: SettingsDep) -> Mailer:
-    return SmtpMailer(settings)
+    """One per process, over the same transport the worker uses: Resend or SMTP."""
+    global _mailer
+    if _mailer is None:
+        _mailer = TransportMailer(build_transport(settings))
+    return _mailer
+
+
+async def close_mailer() -> None:
+    global _mailer
+    if _mailer is not None:
+        await _mailer.aclose()
+    _mailer = None
 
 
 def get_breach_checker(settings: SettingsDep) -> BreachChecker:

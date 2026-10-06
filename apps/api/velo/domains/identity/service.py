@@ -111,6 +111,19 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def verification_url(settings: Settings, user_id: uuid.UUID, email: str) -> str:
+    """A fresh verify-email link: signed, expiring, and bound to ``email`` —
+    if the address changes, the link stops working."""
+    token = encode_token(
+        "verify_email",
+        user_id,
+        settings.secret_key.get_secret_value(),
+        VERIFY_EMAIL_TTL,
+        fp=fingerprint(email),
+    )
+    return f"{settings.storefront_url}/verify-email?token={token}"
+
+
 def password_problems(password: str, email: str | None = None) -> list[FieldError]:
     """Length and similarity rules (NIST SP 800-63B): no composition rules,
     which push people towards ``Password1!`` rather than towards strength."""
@@ -200,7 +213,8 @@ class AuthService:
             raise EmailTakenError() from exc
 
         issued = await self._start_session(user, client)
-        # The welcome email goes through the outbox: sent by the worker, once.
+        # The welcome and verification emails go through the outbox: committed
+        # with the account, sent by the worker, retried until delivered.
         record_event(
             self._session,
             "user",
@@ -208,10 +222,9 @@ class AuthService:
             "user.registered",
             {"email": user.email, "first_name": first_name},
         )
+        self._request_verification(user)
         await self._session.commit()
         logger.info("user_registered", user_id=str(user.id))
-
-        await self._send_verification(user)
         return issued
 
     # ── Sign-in ───────────────────────────────────────────────────────────
@@ -464,14 +477,11 @@ class AuthService:
 
     # ── Email verification ────────────────────────────────────────────────
 
-    async def _send_verification(self, user: UserRecord) -> None:
-        token = encode_token(
-            "verify_email", user.id, self._secret, VERIFY_EMAIL_TTL, fp=fingerprint(user.email)
-        )
-        await self._templated(
-            "verify_email",
-            user.email,
-            {"verify_url": f"{self._settings.storefront_url}/verify-email?token={token}"},
+    def _request_verification(self, user: UserRecord) -> None:
+        """Queue the verification email. The worker mints the link when it sends
+        (:func:`verification_url`), so no token is ever stored in the outbox."""
+        record_event(
+            self._session, "user", user.id, "user.verification_requested", {"email": user.email}
         )
 
     async def _templated(self, kind: str, to: str, context: dict[str, Any]) -> None:
@@ -505,7 +515,8 @@ class AuthService:
         await self._enforce(rate_limit.VERIFICATION_PER_EMAIL, email)
         user = await self._users.get_by_email(email)
         if user is not None and user.email_verified_at is None and user.status == "active":
-            await self._send_verification(user)
+            self._request_verification(user)
+            await self._session.commit()
 
     # ── Password reset ────────────────────────────────────────────────────
 

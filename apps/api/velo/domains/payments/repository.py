@@ -7,6 +7,7 @@ query that needs a checkout's status (ARCHITECTURE.md §3, rule 5).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -359,14 +360,14 @@ class PaymentRepository:
                 )
             )
         await self._session.flush()
-        return await self._refund(row)
+        return (await self._refunds([row]))[0]
 
     async def refund(self, refund_id: uuid.UUID, *, lock: bool = False) -> RefundRecord | None:
         query = select(Refund).where(Refund.id == refund_id)
         if lock:
             query = query.with_for_update()
         row = await self._session.scalar(query.execution_options(populate_existing=True))
-        return await self._refund(row) if row else None
+        return (await self._refunds([row]))[0] if row else None
 
     async def refund_by_provider_id(self, provider_refund_id: str) -> RefundRecord | None:
         row = await self._session.scalar(
@@ -374,7 +375,7 @@ class PaymentRepository:
             .where(Refund.provider_refund_id == provider_refund_id)
             .execution_options(populate_existing=True)
         )
-        return await self._refund(row) if row else None
+        return (await self._refunds([row]))[0] if row else None
 
     async def refunds_for_order(self, order_id: uuid.UUID) -> list[RefundRecord]:
         rows = (
@@ -385,7 +386,7 @@ class PaymentRepository:
                 .execution_options(populate_existing=True)
             )
         ).all()
-        return [await self._refund(row) for row in rows]
+        return await self._refunds(rows)
 
     async def refunded_units(self, order_id: uuid.UUID) -> dict[uuid.UUID, tuple[int, int]]:
         """Per order line: ``(units refunded, of which removed from the order)``.
@@ -457,36 +458,45 @@ class PaymentRepository:
         )
         return list(rows.all())
 
-    async def _refund(self, row: Refund) -> RefundRecord:
-        items = (
-            await self._session.scalars(select(RefundItem).where(RefundItem.refund_id == row.id))
-        ).all()
-        return RefundRecord(
-            id=row.id,
-            payment_id=row.payment_id,
-            order_id=row.order_id,
-            return_id=row.return_id,
-            provider_refund_id=row.provider_refund_id,
-            amount=row.amount,
-            currency=row.currency,
-            reason=row.reason,
-            status=row.status,
-            actor_id=row.actor_id,
-            note=row.note,
-            submitted_at=row.submitted_at,
-            attempts=row.attempts,
-            last_error=row.last_error,
-            created_at=row.created_at,
-            items=tuple(
+    async def _refunds(self, rows: Sequence[Refund]) -> list[RefundRecord]:
+        """Records for these refunds, with every refund's lines read in one query."""
+        if not rows:
+            return []
+        items: dict[uuid.UUID, list[RefundItemRecord]] = {}
+        for item in (
+            await self._session.scalars(
+                select(RefundItem).where(RefundItem.refund_id.in_([row.id for row in rows]))
+            )
+        ).all():
+            items.setdefault(item.refund_id, []).append(
                 RefundItemRecord(
                     order_item_id=item.order_item_id,
                     quantity=item.quantity,
                     amount=item.amount,
                     restock=item.restock,
                 )
-                for item in items
-            ),
-        )
+            )
+        return [
+            RefundRecord(
+                id=row.id,
+                payment_id=row.payment_id,
+                order_id=row.order_id,
+                return_id=row.return_id,
+                provider_refund_id=row.provider_refund_id,
+                amount=row.amount,
+                currency=row.currency,
+                reason=row.reason,
+                status=row.status,
+                actor_id=row.actor_id,
+                note=row.note,
+                submitted_at=row.submitted_at,
+                attempts=row.attempts,
+                last_error=row.last_error,
+                created_at=row.created_at,
+                items=tuple(items.get(row.id, ())),
+            )
+            for row in rows
+        ]
 
     # ── Idempotency keys ──────────────────────────────────────────────────
 

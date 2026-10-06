@@ -39,7 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import velo.db.models  # noqa: F401 — register every mapper; FKs cross domains
 from velo.core.config import Settings, get_settings
-from velo.core.email import Attachment, EmailMessage, Mailer, SmtpMailer
+from velo.core.email import Attachment, EmailMessage, Mailer
 from velo.core.jobs import RELAY_JOB, redis_settings
 from velo.core.logging import configure_logging, get_logger
 from velo.core.meili import MeiliClient, SearchUnavailableError
@@ -58,6 +58,8 @@ from velo.domains.checkout.processing import (
     Reconciler,
     build_settlement,
 )
+from velo.domains.identity.repository import UserRepository
+from velo.domains.identity.service import verification_url
 from velo.domains.inventory.service import InventoryService
 from velo.domains.orders.analytics import AnalyticsService
 from velo.domains.orders.documents import invoice_pdf
@@ -71,7 +73,7 @@ from velo.domains.platform.job_failures import MAX_TRIES, retrying
 from velo.domains.system.worker_health import HEARTBEAT_KEY
 from velo.emails.cart_recovery import CartRecovery
 from velo.emails.service import EmailService
-from velo.emails.transport import Transport, build_transport
+from velo.emails.transport import Transport, TransportMailer, build_transport
 
 logger = get_logger(__name__)
 
@@ -93,8 +95,8 @@ class Worker:
         self.settings = settings
         self.meili = MeiliClient(settings, timeout=10.0)
         self.storage = MediaStorage(settings)
-        self.mailer: Mailer = SmtpMailer(settings)  # internal alerts: best effort
         self.transport: Transport = build_transport(settings)  # customer email: retried
+        self.mailer: Mailer = TransportMailer(self.transport)  # internal alerts: best effort
         self.cache = CatalogCache(get_redis(), settings.catalog_cache_ttl_seconds)
         self.providers: PaymentProviders = build_providers(settings)
 
@@ -217,11 +219,7 @@ async def _slugs_for(
         for key in ("slug", "old_slug")
         if isinstance(value := event.payload.get(key), str)
     }
-    catalog = CatalogRepository(session)
-    for product_id in product_ids:
-        product = await catalog.product_by_id(product_id, include_deleted=True)
-        if product is not None:
-            slugs.add(product.slug)
+    slugs.update(await CatalogRepository(session).slugs(product_ids))
     return sorted(slugs)
 
 
@@ -266,6 +264,8 @@ async def _handle(ctx: dict[str, Any], session: AsyncSession, event: PendingEven
                 "first_name": event.payload.get("first_name"),
                 "shop_url": f"{worker.settings.storefront_url}/products",
             })  # fmt: skip
+        case "user.verification_requested":
+            await _verify_email(worker, session, emails, event)
         case (
             "order.needs_attention"
             | "order.dispute_opened"
@@ -278,6 +278,27 @@ async def _handle(ctx: dict[str, Any], session: AsyncSession, event: PendingEven
             await _payments_alert(worker, event)
         case _:
             logger.info("outbox_event_ignored", event_type=event.event_type)
+
+
+async def _verify_email(
+    worker: Worker, session: AsyncSession, emails: EmailService, event: PendingEvent
+) -> None:
+    """The link is minted now, not when the event was recorded: no token sits in
+    the outbox, and its 24 hours start when it is sent. The account is read
+    again first — verified, closed, or re-addressed since, and nothing is sent."""
+    user = await UserRepository(session).get_by_id(event.aggregate_id)
+    email = str(event.payload["email"])
+    if (
+        user is None
+        or user.status != "active"
+        or user.email_verified_at is not None
+        or user.email != email
+    ):
+        logger.info("verification_email_skipped", user_id=str(event.aggregate_id))
+        return
+    await _send(emails, "verify_email", event, {
+        "verify_url": verification_url(worker.settings, user.id, user.email),
+    })  # fmt: skip
 
 
 async def _send(

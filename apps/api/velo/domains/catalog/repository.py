@@ -33,6 +33,7 @@ from sqlalchemy import (
     or_,
     select,
     table,
+    true,
     tuple_,
     update,
 )
@@ -360,11 +361,19 @@ def _escape_like(value: str) -> str:
 
 
 def _text_match(query_text: str) -> ColumnElement[bool]:
-    """Full-text match, or a title substring, so a half-typed word still finds something."""
+    """Full-text match, or a title substring, so a half-typed word still finds something.
+
+    The full-text side is a subquery so it is answered from idx_products_fts
+    once. Inline in the OR, Postgres computed ``to_tsvector`` for every live
+    product instead (docs/PERFORMANCE.md).
+    """
     fts = literal_column(_FTS_DOCUMENT).op("@@")(
         func.websearch_to_tsquery(literal_column("'english'"), query_text)
     )
-    return or_(fts, Product.title.ilike(f"%{_escape_like(query_text)}%", escape="\\"))
+    return or_(
+        Product.id.in_(select(Product.id).where(fts).correlate(None)),
+        Product.title.ilike(f"%{_escape_like(query_text)}%", escape="\\"),
+    )
 
 
 def _text_rank(query_text: str) -> ColumnElement[Any]:
@@ -387,7 +396,12 @@ class CatalogRepository:
             descendants = select(Category.id).where(
                 Category.path.op("<@")(func.text2ltree(filters.category_path))
             )
-            query = query.where(Product.category_id.in_(descendants))
+            # = ANY(ARRAY(...)): the category ids are resolved once, up front,
+            # so the planner probes idx_products_category with them rather
+            # than joining categories to a scan of every product.
+            query = query.where(
+                Product.category_id == any_(func.array(descendants.scalar_subquery()))
+            )
         if filters.collection_slug is not None:
             query = query.where(
                 exists(
@@ -426,24 +440,57 @@ class CatalogRepository:
             query = query.where(_text_match(filters.text_query))
         return query
 
-    def _listing(self, filters: ListingFilter, *, include_hidden: bool = False) -> Select[Any]:
-        stats_query = (
-            select(
-                ProductVariant.product_id.label("product_id"),
-                func.min(ProductVariant.price_amount).label("price_min"),
-                func.max(ProductVariant.price_amount).label("price_max"),
-                func.max(ProductVariant.compare_at_amount).label("compare_at_max"),
-                func.min(ProductVariant.price_currency).label("currency"),
-                func.coalesce(func.bool_or(variant_available()), false()).label("in_stock"),
-            )
+    def _listing(
+        self,
+        filters: ListingFilter,
+        *,
+        include_hidden: bool = False,
+        per_product: bool = False,
+    ) -> Select[Any]:
+        """Live products with their price range and stock, filtered.
+
+        The variant statistics come one of two ways (docs/PERFORMANCE.md):
+
+        - ``per_product``: a LATERAL subquery per product, through
+          idx_variants_product. For a newest-first page and for an explicit
+          handful of ids: the work stops with the page.
+        - otherwise one GROUP BY over the variants of the candidate products
+          only. A sort by price or rating needs every candidate's statistics
+          anyway; the planner then probes a narrow set by index and hashes a
+          broad one, where a probe per product would cost more.
+        """
+        columns = (
+            func.min(ProductVariant.price_amount).label("price_min"),
+            func.max(ProductVariant.price_amount).label("price_max"),
+            func.max(ProductVariant.compare_at_amount).label("compare_at_max"),
+            func.min(ProductVariant.price_currency).label("currency"),
+            func.coalesce(func.bool_or(variant_available()), false()).label("in_stock"),
+        )
+        variants = (
+            select(*columns)
             .outerjoin(_inventory, _inventory.c.variant_id == ProductVariant.id)
             .where(ProductVariant.deleted_at.is_(None))
             .group_by(ProductVariant.product_id)
         )
-        if filters.product_ids is not None:
-            # Aggregate only the variants asked about, not the whole catalog.
-            stats_query = stats_query.where(among(ProductVariant.product_id, filters.product_ids))
-        stats = stats_query.subquery("stats")
+        # GROUP BY keeps the inner-join meaning in both forms: a product
+        # without live variants has no stats row and is not listed.
+        stats: Any
+        if per_product:
+            stats = variants.where(ProductVariant.product_id == Product.id).lateral("stats")
+            joined_on: ColumnElement[bool] = true()
+        else:
+            if filters.product_ids is not None:
+                candidates: Any = among(ProductVariant.product_id, filters.product_ids)
+            else:
+                products = select(Product.id).where(
+                    Product.deleted_at.is_(None) if include_hidden else live_products()
+                )
+                candidates = ProductVariant.product_id.in_(
+                    self._product_conditions(products, filters).correlate(None)
+                )
+            variants = variants.add_columns(ProductVariant.product_id.label("product_id"))
+            stats = variants.where(candidates).subquery("stats")
+            joined_on = stats.c.product_id == Product.id
         query = select(
             Product.id,
             Product.slug,
@@ -459,7 +506,7 @@ class CatalogRepository:
             stats.c.compare_at_max,
             stats.c.currency,
             stats.c.in_stock,
-        ).join(stats, stats.c.product_id == Product.id)
+        ).join(stats, joined_on)
         if not include_hidden:
             query = query.where(live_products())
         query = self._product_conditions(query, filters)
@@ -491,7 +538,7 @@ class CatalogRepository:
         limit: int,
         after: tuple[Any, uuid.UUID] | None,
     ) -> Page:
-        query = self._listing(filters)
+        query = self._listing(filters, per_product=sort == "newest")
         sort_column, ascending = self._sort_column(query, sort)
         query = query.add_columns(sort_column.label("sort_key"))
         id_column = query.selected_columns.id
@@ -522,7 +569,7 @@ class CatalogRepository:
             return []
         rows = (
             await self._session.execute(
-                self._listing(ListingFilter(product_ids=tuple(product_ids)))
+                self._listing(ListingFilter(product_ids=tuple(product_ids)), per_product=True)
             )
         ).all()
         images = await self._primary_images([row.id for row in rows])
@@ -590,6 +637,18 @@ class CatalogRepository:
             query = query.where(Product.deleted_at.is_(None))
         row = await self._session.scalar(query)
         return _product(row) if row else None
+
+    async def slugs(self, product_ids: Sequence[uuid.UUID]) -> list[str]:
+        """Current slugs of these products, deleted ones included, in one query."""
+        if not product_ids:
+            return []
+        return list(
+            (
+                await self._session.scalars(
+                    select(Product.slug).where(among(Product.id, product_ids))
+                )
+            ).all()
+        )
 
     async def slug_taken(self, slug: str, *, except_id: uuid.UUID | None = None) -> bool:
         query = select(literal(1)).select_from(Product).where(Product.slug == slug)
@@ -1353,6 +1412,10 @@ class CatalogRepository:
                 .join(ProductOption, ProductOption.id == OptionValue.option_id)
                 .where(
                     among(ProductVariant.product_id, ids),
+                    # Redundant (an option belongs to its variants' product), but it
+                    # lets the planner start from these products' options instead of
+                    # every option value in the catalog (docs/PERFORMANCE.md).
+                    among(ProductOption.product_id, ids),
                     ProductVariant.deleted_at.is_(None),
                     func.lower(ProductOption.name).in_([name.lower() for name in option_names]),
                 )
@@ -1432,7 +1495,11 @@ class CatalogRepository:
             return {}
         rows = (
             await self._session.execute(
-                self._listing(ListingFilter(product_ids=tuple(product_ids)), include_hidden=True)
+                self._listing(
+                    ListingFilter(product_ids=tuple(product_ids)),
+                    include_hidden=True,
+                    per_product=True,
+                )
             )
         ).all()
         return {row.id: (row.price_min, row.currency, bool(row.in_stock)) for row in rows}

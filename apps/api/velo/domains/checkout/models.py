@@ -65,6 +65,8 @@ class CheckoutSession(HasId, HasTimestamps, Base):
         Index(
             "idx_checkout_expiry",
             "expires_at",
-            postgresql_where=text("status NOT IN ('confirmed','failed','expired')"),
+            # Exactly the statuses CheckoutSweeper sweeps, which it names as
+            # literals: only then can Postgres prove its query fits the index.
+            postgresql_where=text("status IN ('initiated','address_set','shipping_set','failed')"),
         ),
     )

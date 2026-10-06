@@ -62,8 +62,15 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # Hand out a token on first contact, so an anonymous form (sign-in,
-        # register) has one to echo before it has ever been signed in.
-        if CSRF_COOKIE not in request.cookies and not _sets_cookie(response, CSRF_COOKIE):
+        # register) has one to echo before it has ever been signed in. Never on
+        # a response a shared cache may keep (the public catalog): a CDN would
+        # replay one token to every visitor, and a token an attacker can read
+        # is no defence. Those clients get theirs from /auth/csrf instead.
+        if (
+            CSRF_COOKIE not in request.cookies
+            and not _sets_cookie(response, CSRF_COOKIE)
+            and not _publicly_cacheable(response)
+        ):
             set_csrf_cookie(response, self._settings)
         return response
 
@@ -94,3 +101,8 @@ def _sets_cookie(response: Response, name: str) -> bool:
     return any(
         key == b"set-cookie" and value.startswith(prefix) for key, value in response.raw_headers
     )
+
+
+def _publicly_cacheable(response: Response) -> bool:
+    directives = response.headers.get("cache-control", "").lower().split(",")
+    return "public" in {directive.strip() for directive in directives}

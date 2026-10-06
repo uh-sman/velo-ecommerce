@@ -9,8 +9,11 @@ import uuid
 
 import pytest
 from jinja2 import UndefinedError
+from pydantic import SecretStr
 
 from velo.api.v1.email import sign_svix, verify_svix
+from velo.core.config import Settings
+from velo.core.email import EmailMessage, InMemoryMailer
 from velo.domains.payments.exceptions import WebhookSignatureError
 from velo.domains.platform.job_failures import backoff_seconds
 from velo.domains.system.worker_health import WorkerHealth
@@ -20,6 +23,13 @@ from velo.emails.tokens import (
     read_cart_token,
     read_unsubscribe_token,
     unsubscribe_token,
+)
+from velo.emails.transport import (
+    ResendTransport,
+    SmtpTransport,
+    TransportError,
+    TransportMailer,
+    build_transport,
 )
 
 STORE = {"name": "Velo", "support_email": "help@velo.dev", "address": ["1 Way", "SF"]}
@@ -118,3 +128,21 @@ def test_worker_health_in_prometheus_format() -> None:
     text = health.prometheus()
     assert "# TYPE velo_worker_up gauge\nvelo_worker_up 1\n" in text
     assert "velo_queue_depth 2\n" in text
+
+
+async def test_the_request_path_mailer_sends_through_the_transport_and_swallows_failures() -> None:
+    transport = InMemoryMailer()
+    mailer = TransportMailer(transport)
+    message = EmailMessage(to="ada@example.com", subject="Reset your password", text="…")
+
+    assert await mailer.send(message) == "mem-1"
+    transport.fail_next = TransportError("Resend 503")
+    assert await mailer.send(message) is None  # logged, never raised into the request
+    assert transport.outbox == [message]
+
+
+def test_the_configured_transport_is_resend_when_keyed_and_smtp_otherwise() -> None:
+    # A developer's .env may contain the real Resend key; test SMTP explicitly.
+    assert isinstance(build_transport(Settings(resend_api_key=SecretStr(""))), SmtpTransport)
+    keyed = build_transport(Settings(resend_api_key=SecretStr("re_test")))
+    assert isinstance(keyed, ResendTransport)

@@ -5,6 +5,12 @@ const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
 
+  // `radix-ui` is one barrel over every primitive; without this a Server
+  // Component importing one (Button's Slot) ships all of them to the client.
+  experimental: {
+    optimizePackageImports: ["radix-ui"],
+  },
+
   // Traced standalone server — what docker/web.Dockerfile ships. Opt-in, because
   // tracing creates symlinks and Windows refuses those without Developer Mode.
   ...(process.env["NEXT_OUTPUT_STANDALONE"] === "1" && { output: "standalone" }),

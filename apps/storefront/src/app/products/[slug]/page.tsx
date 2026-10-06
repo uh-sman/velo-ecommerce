@@ -8,7 +8,9 @@ import { ProductGrid } from "@/components/commerce/product-card";
 import { ProductBuy } from "@/components/product/buy-box";
 import { RecentlyViewed } from "@/components/product/recently-viewed";
 import { Reviews } from "@/components/product/reviews";
+import { JsonLd } from "@/components/seo/json-ld";
 import { getSessionUser, publicClient } from "@/lib/api-server";
+import { absoluteUrl, breadcrumbList, SITE_NAME } from "@/lib/site";
 
 type Product = Schema<"ProductDetail">;
 
@@ -60,14 +62,24 @@ export async function generateMetadata({
   const product = await getProduct((await params).slug);
   if (!product) return {};
   const image = product.media[0];
+  const images = image ? [{ url: image.url, alt: image.alt_text ?? product.title }] : undefined;
+  const description = product.seo.description ?? undefined;
   return {
     title: product.seo.title,
-    ...(product.seo.description ? { description: product.seo.description } : {}),
+    ...(description ? { description } : {}),
     alternates: { canonical: `/products/${product.slug}` },
     openGraph: {
+      siteName: SITE_NAME,
       title: product.seo.title,
-      ...(product.seo.description ? { description: product.seo.description } : {}),
-      ...(image ? { images: [{ url: image.url, alt: image.alt_text ?? product.title }] } : {}),
+      url: `/products/${product.slug}`,
+      ...(description ? { description } : {}),
+      ...(images ? { images } : {}),
+    },
+    twitter: {
+      card: images ? "summary_large_image" : "summary",
+      title: product.seo.title,
+      ...(description ? { description } : {}),
+      ...(images ? { images } : {}),
     },
   };
 }
@@ -84,6 +96,7 @@ function structuredData(product: Product): Record<string, unknown> {
     ...(product.description ? { description: product.description } : {}),
     ...(product.brand ? { brand: { "@type": "Brand", name: product.brand } } : {}),
     image: product.media.map((m) => m.url),
+    url: absoluteUrl(`/products/${product.slug}`),
     sku: product.variants[0]?.sku,
     offers: {
       "@type": "AggregateOffer",
@@ -120,12 +133,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-16 px-4 py-8 pb-28 lg:pb-8">
-      <script
-        type="application/ld+json"
-        // JSON.stringify escapes quotes; "<" is escaped so no string can close the tag.
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(structuredData(product)).replace(/</g, "\\u003c"),
-        }}
+      <JsonLd
+        data={[
+          structuredData(product),
+          breadcrumbList([
+            ...product.breadcrumbs.map((c) => ({ name: c.name, path: `/categories/${c.slug}` })),
+            { name: product.title, path: `/products/${product.slug}` },
+          ]),
+        ]}
       />
       {product.breadcrumbs.length > 0 && (
         <nav aria-label="Breadcrumb" className="-mb-12">

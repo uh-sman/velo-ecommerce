@@ -8,12 +8,12 @@ never imported as a model (ARCHITECTURE.md §3, rule 5).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import column, func, literal, select, table, tuple_, update
+from sqlalchemy import Integer, Uuid, column, func, literal, select, table, tuple_, update, values
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -119,6 +119,11 @@ def _stock(row: InventoryItem) -> StockRecord:
     )
 
 
+def _rows(name: str, types: Mapping[str, Any], data: Sequence[tuple[Any, ...]]) -> Any:
+    """An inline ``(VALUES ...) AS name (columns)`` table, to update many rows in one statement."""
+    return values(*(column(key, type_) for key, type_ in types.items()), name=name).data(list(data))
+
+
 class InventoryRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -179,6 +184,35 @@ class InventoryRepository:
         if row is None:  # pragma: no cover — the service locks the row first
             raise LookupError(variant_id)
         return _stock(row)
+
+    async def update_many(
+        self, changes: Mapping[uuid.UUID, tuple[int, int]]
+    ) -> dict[uuid.UUID, StockRecord]:
+        """Set ``(quantity_on_hand, quantity_reserved)`` on several locked rows in one statement."""
+        if not changes:
+            return {}
+        rows = _rows(
+            "changes",
+            {"variant_id": Uuid(), "on_hand": Integer(), "reserved": Integer()},
+            [(variant_id, *quantities) for variant_id, quantities in changes.items()],
+        )
+        updated = await self._session.scalars(
+            update(InventoryItem)
+            .where(InventoryItem.variant_id == rows.c.variant_id)
+            .values(
+                quantity_on_hand=rows.c.on_hand,
+                quantity_reserved=rows.c.reserved,
+                updated_at=func.now(),
+            )
+            .returning(InventoryItem)
+            .execution_options(populate_existing=True)
+        )
+        return {row.variant_id: _stock(row) for row in updated.all()}
+
+    async def add_movements(self, movements: Sequence[Mapping[str, Any]]) -> None:
+        """Several ledger rows in one INSERT. Nothing is read back."""
+        if movements:
+            await self._session.execute(insert(InventoryMovement).values(list(movements)))
 
     async def add_movement(self, **fields: Any) -> MovementRecord:
         row = InventoryMovement(**fields)
@@ -325,6 +359,38 @@ class InventoryRepository:
             product_slug=row.slug,
         )
 
+    async def variant_labels(
+        self, variant_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, VariantLabel]:
+        """:meth:`variant_label` for several variants, in one query."""
+        if not variant_ids:
+            return {}
+        rows = (
+            await self._session.execute(
+                select(
+                    _variants.c.id,
+                    _variants.c.product_id,
+                    _variants.c.sku,
+                    _variants.c.title,
+                    _products.c.title.label("product_title"),
+                    _products.c.slug,
+                )
+                .join(_products, _products.c.id == _variants.c.product_id)
+                .where(_variants.c.id.in_(variant_ids), _variants.c.deleted_at.is_(None))
+            )
+        ).all()
+        return {
+            row.id: VariantLabel(
+                variant_id=row.id,
+                product_id=row.product_id,
+                sku=row.sku,
+                variant_title=row.title,
+                product_title=row.product_title,
+                product_slug=row.slug,
+            )
+            for row in rows
+        }
+
     async def item_id_for(self, variant_id: uuid.UUID) -> uuid.UUID | None:
         item_id: uuid.UUID | None = await self._session.scalar(
             select(InventoryItem.id).where(InventoryItem.variant_id == variant_id)
@@ -333,18 +399,27 @@ class InventoryRepository:
 
     # ── Reservations ──────────────────────────────────────────────────────
 
-    async def add_reservation(
-        self, variant_id: uuid.UUID, session_id: uuid.UUID, quantity: int, expires_at: datetime
+    async def add_reservations(
+        self,
+        session_id: uuid.UUID,
+        quantities: Sequence[tuple[uuid.UUID, int]],
+        expires_at: datetime,
     ) -> None:
-        self._session.add(
-            InventoryReservation(
-                variant_id=variant_id,
-                checkout_session_id=session_id,
-                quantity=quantity,
-                expires_at=expires_at,
+        """One checkout's holds ``(variant_id, quantity)``, in one INSERT."""
+        if quantities:
+            await self._session.execute(
+                insert(InventoryReservation).values(
+                    [
+                        {
+                            "variant_id": variant_id,
+                            "checkout_session_id": session_id,
+                            "quantity": quantity,
+                            "expires_at": expires_at,
+                        }
+                        for variant_id, quantity in quantities
+                    ]
+                )
             )
-        )
-        await self._session.flush()
 
     async def active_reservations(self, session_id: uuid.UUID) -> list[ReservationRecord]:
         """A checkout's live reservations, locked; the caller locks stock rows first."""
@@ -403,14 +478,20 @@ class InventoryRepository:
             .values(expires_at=expires_at)
         )
 
-    async def add_reserved(self, variant_id: uuid.UUID, delta: int) -> None:
-        """``quantity_reserved += delta``. The CHECK constraints are the backstop."""
+    async def add_reserved_many(self, deltas: Mapping[uuid.UUID, int]) -> None:
+        """``quantity_reserved += delta`` per variant, in one UPDATE. Lock the rows first, in
+        order; the CHECK constraints are the backstop."""
+        if not deltas:
+            return
+        rows = _rows("deltas", {"variant_id": Uuid(), "delta": Integer()}, list(deltas.items()))
         await self._session.execute(
             update(InventoryItem)
-            .where(InventoryItem.variant_id == variant_id)
+            .where(InventoryItem.variant_id == rows.c.variant_id)
             .values(
-                quantity_reserved=InventoryItem.quantity_reserved + delta, updated_at=func.now()
+                quantity_reserved=InventoryItem.quantity_reserved + rows.c.delta,
+                updated_at=func.now(),
             )
+            .execution_options(synchronize_session="fetch")
         )
 
     # ── Back in stock ─────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ branch has a test, failure branches included.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
 from datetime import timedelta
 from typing import Any
@@ -21,10 +21,12 @@ from tests.conftest import TEST_ENV
 from tests.integration.conftest import Browser
 from velo.core.email import InMemoryMailer
 from velo.domains.identity import service as identity_service
+from velo.emails.transport import TransportError
 
 pytestmark = pytest.mark.integration
 
 NewBrowser = Callable[[], AbstractAsyncContextManager[Browser]]
+Relay = Callable[[], Awaitable[dict[str, int]]]
 
 EMAIL = "casey@example.com"
 PASSWORD = "tangerine-ocelot-harbour"
@@ -110,9 +112,10 @@ async def test_bearer_authenticated_requests_are_exempt_from_csrf(
 
 
 async def test_register_signs_in_and_sends_a_verification_email(
-    browser: Browser, mailer: InMemoryMailer
+    browser: Browser, mailer: InMemoryMailer, relay: Relay
 ) -> None:
     response = await register(browser, first_name="Casey", marketing_opt_in=True)
+    assert mailer.outbox == []  # queued with the account, not sent in the request
 
     assert response.status_code == 201
     user = response.json()["user"]
@@ -128,8 +131,11 @@ async def test_register_signs_in_and_sends_a_verification_email(
     assert "HttpOnly" in refresh and "Path=/api/v1/auth/refresh" in refresh
 
     assert (await browser.get("/api/v1/auth/me")).json()["email"] == EMAIL
-    assert mailer.outbox[-1].to == EMAIL
-    assert "/verify-email?token=" in mailer.outbox[-1].text
+    await relay()
+    verify = [m for m in mailer.outbox if m.subject == "Confirm your email address"]
+    assert [m.to for m in verify] == [EMAIL]
+    assert "/verify-email?token=" in verify[0].text
+    assert await sql("SELECT status FROM sent_emails WHERE kind = 'verify_email'") == "sent"
 
 
 async def test_register_refuses_a_taken_email_regardless_of_case(
@@ -444,9 +450,10 @@ async def test_change_password_needs_the_current_one_and_signs_out_other_devices
 
 
 async def test_email_verification_link_verifies_once_and_harmlessly_twice(
-    browser: Browser, mailer: InMemoryMailer
+    browser: Browser, mailer: InMemoryMailer, relay: Relay
 ) -> None:
     await register(browser)
+    await relay()
     token = link_token(mailer, "/verify-email")
 
     first = await browser.post("/api/v1/auth/verify-email", json={"token": token})
@@ -458,9 +465,10 @@ async def test_email_verification_link_verifies_once_and_harmlessly_twice(
 
 @pytest.mark.parametrize("tamper", ["truncate", "wrong-type"])
 async def test_an_invalid_verification_link_is_refused(
-    browser: Browser, mailer: InMemoryMailer, tamper: str
+    browser: Browser, mailer: InMemoryMailer, relay: Relay, tamper: str
 ) -> None:
     await register(browser)
+    await relay()
     if tamper == "truncate":
         token = link_token(mailer, "/verify-email")[:-4]
     else:  # a password-reset token presented as a verification token
@@ -474,18 +482,59 @@ async def test_an_invalid_verification_link_is_refused(
 
 
 async def test_resend_verification_never_reveals_whether_an_account_exists(
-    browser: Browser, mailer: InMemoryMailer
+    browser: Browser, mailer: InMemoryMailer, relay: Relay
 ) -> None:
     await register(browser)
+    await relay()
     sent = len(mailer.outbox)
 
     unknown = await browser.post(
         "/api/v1/auth/resend-verification", json={"email": "nobody@example.com"}
     )
     known = await browser.post("/api/v1/auth/resend-verification", json={"email": EMAIL})
+    await relay()
 
     assert unknown.status_code == known.status_code == 204
     assert len(mailer.outbox) == sent + 1
+    assert mailer.outbox[-1].to == EMAIL
+
+
+async def test_a_queued_verification_email_is_dropped_once_the_email_is_verified(
+    browser: Browser, mailer: InMemoryMailer, relay: Relay
+) -> None:
+    await register(browser)
+    await browser.post("/api/v1/auth/resend-verification", json={"email": EMAIL})
+    await sql("UPDATE users SET email_verified_at = now()")  # verified before the relay ran
+
+    await relay()
+
+    assert not [m for m in mailer.outbox if m.subject == "Confirm your email address"]
+
+
+async def test_a_verification_email_that_fails_to_send_is_retried(
+    browser: Browser, mailer: InMemoryMailer, relay: Relay
+) -> None:
+    await register(browser)
+    await relay()
+    await browser.post("/api/v1/auth/resend-verification", json={"email": EMAIL})
+    mailer.fail_next = TransportError("provider down")
+
+    await relay()  # fails: the event stays in the outbox
+    assert (
+        await sql(
+            "SELECT attempts FROM outbox_events WHERE event_type = 'user.verification_requested'"
+            " AND published_at IS NULL"
+        )
+        == 1
+    )
+    await relay()  # the next round sends it
+
+    verify = [m for m in mailer.outbox if m.subject == "Confirm your email address"]
+    assert len(verify) == 2
+    token = link_token(mailer, "/verify-email")
+    assert (
+        await browser.post("/api/v1/auth/verify-email", json={"token": token})
+    ).status_code == 204
 
 
 # ── Password reset ────────────────────────────────────────────────────────────

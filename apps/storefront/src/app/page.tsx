@@ -10,6 +10,7 @@ import { collectionProducts, newArrivals } from "@/lib/catalog-server";
 export const metadata: Metadata = {
   title: { absolute: "Velo — considered goods, honestly priced" },
   description: "New arrivals, collections, free shipping over $75 and 30-day returns.",
+  alternates: { canonical: "/" },
 };
 
 // Rebuilt at most once a minute; the catalog reads underneath are cached too.

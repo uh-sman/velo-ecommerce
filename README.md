@@ -417,9 +417,12 @@ Run the background worker in **Terminal 1b** (Phase 6 onwards). It keeps the sea
 ```bash
 cd apps/api
 uv run arq velo.worker.WorkerSettings      # or, from the repo root: pnpm worker
+docker compose -f docker/docker-compose.dev.yml up -d
 ```
 
-Without the worker the API still works, but search results lag catalog changes until it runs. Emails land in MailHog at <http://localhost:8025>.
+Without the worker the API still works, but search results lag catalog changes and queued emails (including account-verification links) are not sent until it runs. With the default development settings, messages are captured by MailHog at <http://localhost:8025>; they are not forwarded to real inboxes.
+
+For real email delivery, set `VELO_RESEND_API_KEY` and set `VELO_EMAIL_FROM` to an address on a domain verified in Resend. Publish the SPF/DKIM records Resend provides, and keep the worker running (`pnpm worker`) so it can deliver registration and resend-verification events. Keep the API key in the local environment file or deployment secret store; never put it in frontend configuration or commit it.
 
 Run the frontend in **Terminal 2**, from the repository root:
 

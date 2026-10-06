@@ -31,10 +31,16 @@ async def search_rate_limit(
 
 RateLimited = Depends(search_rate_limit)
 
+# Not ``public`` like the catalog: each response carries the caller's own
+# rate-limit budget, and a search answered by a CDN would never count against
+# it. The browser may keep one, but revalidates it every time (ETag, 304).
+SEARCH_CACHE = "private, no-cache"
+
 
 @router.get("", response_model=SearchResults, summary="Search products", dependencies=[RateLimited])
 async def search(
     service: SearchServiceDep,
+    response: Response,
     q: Annotated[str, Query(max_length=200)] = "",
     brand: Values = None,
     category: Values = None,
@@ -48,6 +54,7 @@ async def search(
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = 24,
     offset: Annotated[int, Query(ge=0, le=4900)] = 0,
 ) -> SearchResults:
+    response.headers["Cache-Control"] = SEARCH_CACHE
     return await service.search(
         SearchQuery(
             q=q.strip(),
@@ -73,6 +80,9 @@ async def search(
     dependencies=[RateLimited],
 )
 async def suggest(
-    service: SearchServiceDep, q: Annotated[str, Query(max_length=100)] = ""
+    service: SearchServiceDep,
+    response: Response,
+    q: Annotated[str, Query(max_length=100)] = "",
 ) -> list[Suggestion]:
+    response.headers["Cache-Control"] = SEARCH_CACHE
     return await service.suggest(q)

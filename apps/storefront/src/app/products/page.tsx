@@ -8,6 +8,7 @@ import { readListing } from "@/lib/listing";
 export const metadata: Metadata = {
   title: "New arrivals",
   description: "Everything in the store, newest first.",
+  alternates: { canonical: "/products" },
 };
 
 export default async function ProductsPage({

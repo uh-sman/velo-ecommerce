@@ -50,3 +50,6 @@ docker/data/
 
 # k6 run output
 loadtest/summary.json
+
+# Lighthouse CI reports (Phase 14)
+.lighthouseci/

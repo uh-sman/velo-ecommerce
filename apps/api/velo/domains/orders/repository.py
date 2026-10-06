@@ -9,8 +9,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import column, exists, func, literal, or_, select, table, tuple_, update
+from sqlalchemy import column, func, literal, or_, select, table, tuple_, union, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from velo.domains.orders.models import (
     Fulfilment,
@@ -216,6 +217,19 @@ class OrderRepository:
         row = await self._session.scalar(query.execution_options(populate_existing=True))
         return _order(row) if row else None
 
+    async def get_many(self, order_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, OrderRecord]:
+        """Several orders in one query, by id."""
+        if not order_ids:
+            return {}
+        rows = (
+            await self._session.scalars(
+                select(Order)
+                .where(Order.id.in_(set(order_ids)))
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+        return {row.id: _order(row) for row in rows}
+
     async def by_checkout(self, session_id: uuid.UUID) -> OrderRecord | None:
         row = await self._session.scalar(
             select(Order)
@@ -280,12 +294,17 @@ class OrderRepository:
             conditions.append(Order.total_amount <= filters.max_total)
         if filters.query:
             text = filters.query.strip()
+            # A UNION of ids, each branch on its own index. As one OR the
+            # planner scanned every order, and its estimate was high enough
+            # to switch on JIT compilation (docs/PERFORMANCE.md).
+            matched = aliased(Order)
             conditions.append(
-                or_(
-                    Order.order_number == text.upper(),
-                    Order.email == text,  # CITEXT: case-insensitive
-                    exists().where(OrderItem.order_id == Order.id, OrderItem.sku == text.upper()),
-                    exists().where(OrderItem.order_id == Order.id, OrderItem.sku == text),
+                Order.id.in_(
+                    union(
+                        select(matched.id).where(matched.order_number == text.upper()),
+                        select(matched.id).where(matched.email == text),  # CITEXT
+                        select(OrderItem.order_id).where(OrderItem.sku.in_({text.upper(), text})),
+                    )
                 )
             )
         query = select(Order).where(*conditions)
@@ -317,6 +336,17 @@ class OrderRepository:
             query = query.with_for_update()
         rows = (await self._session.scalars(query.execution_options(populate_existing=True))).all()
         return [_item(row) for row in rows]
+
+    async def unit_counts(self, order_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """Units ordered per order, for a page of order summaries, in one query."""
+        if not order_ids:
+            return {}
+        rows = await self._session.execute(
+            select(OrderItem.order_id, func.sum(OrderItem.quantity))
+            .where(OrderItem.order_id.in_(set(order_ids)))
+            .group_by(OrderItem.order_id)
+        )
+        return {order_id: int(units) for order_id, units in rows.all()}
 
     async def update_item(self, item_id: uuid.UUID, **fields: Any) -> None:
         await self._session.execute(
@@ -381,7 +411,7 @@ class OrderRepository:
         row = await self._session.scalar(query.execution_options(populate_existing=True))
         if row is None:
             return None
-        return self._fulfilment(row, await self._fulfilment_items(row.id))
+        return (await self._with_items([row]))[0]
 
     async def fulfilments(self, order_id: uuid.UUID) -> list[FulfilmentRecord]:
         rows = (
@@ -392,7 +422,7 @@ class OrderRepository:
                 .execution_options(populate_existing=True)
             )
         ).all()
-        return [self._fulfilment(row, await self._fulfilment_items(row.id)) for row in rows]
+        return await self._with_items(rows)
 
     async def fulfilments_by_tracking(self, tracking_number: str) -> list[FulfilmentRecord]:
         rows = (
@@ -400,22 +430,26 @@ class OrderRepository:
                 select(Fulfilment).where(Fulfilment.tracking_number == tracking_number)
             )
         ).all()
-        return [self._fulfilment(row, await self._fulfilment_items(row.id)) for row in rows]
+        return await self._with_items(rows)
 
     async def update_fulfilment(self, fulfilment_id: uuid.UUID, **fields: Any) -> None:
         await self._session.execute(
             update(Fulfilment).where(Fulfilment.id == fulfilment_id).values(**fields)
         )
 
-    async def _fulfilment_items(
-        self, fulfilment_id: uuid.UUID
-    ) -> tuple[tuple[uuid.UUID, int], ...]:
-        rows = await self._session.execute(
-            select(FulfilmentItem.order_item_id, FulfilmentItem.quantity).where(
-                FulfilmentItem.fulfilment_id == fulfilment_id
-            )
+    async def _with_items(self, rows: Sequence[Fulfilment]) -> list[FulfilmentRecord]:
+        """Records for these parcels, with every parcel's lines read in one query."""
+        if not rows:
+            return []
+        lines = await self._session.execute(
+            select(
+                FulfilmentItem.fulfilment_id, FulfilmentItem.order_item_id, FulfilmentItem.quantity
+            ).where(FulfilmentItem.fulfilment_id.in_([row.id for row in rows]))
         )
-        return tuple((item_id, int(quantity)) for item_id, quantity in rows.all())
+        items: dict[uuid.UUID, list[tuple[uuid.UUID, int]]] = {}
+        for fulfilment_id, item_id, quantity in lines.all():
+            items.setdefault(fulfilment_id, []).append((item_id, int(quantity)))
+        return [self._fulfilment(row, tuple(items.get(row.id, ()))) for row in rows]
 
     @staticmethod
     def _fulfilment(row: Fulfilment, items: tuple[tuple[uuid.UUID, int], ...]) -> FulfilmentRecord:
@@ -445,14 +479,14 @@ class OrderRepository:
                 ReturnItem(return_id=row.id, order_item_id=item_id, quantity=quantity)
             )
         await self._session.flush()
-        return await self._return(row)
+        return (await self._returns([row]))[0]
 
     async def get_return(self, return_id: uuid.UUID, *, lock: bool = False) -> ReturnRecord | None:
         query = select(Return).where(Return.id == return_id)
         if lock:
             query = query.with_for_update()
         row = await self._session.scalar(query.execution_options(populate_existing=True))
-        return await self._return(row) if row else None
+        return (await self._returns([row]))[0] if row else None
 
     async def returns_for(self, order_id: uuid.UUID) -> list[ReturnRecord]:
         rows = (
@@ -463,7 +497,7 @@ class OrderRepository:
                 .execution_options(populate_existing=True)
             )
         ).all()
-        return [await self._return(row) for row in rows]
+        return await self._returns(rows)
 
     async def list_returns(
         self,
@@ -492,7 +526,7 @@ class OrderRepository:
                 query.order_by(Return.created_at.desc(), Return.id.desc()).limit(limit + 1)
             )
         ).all()
-        return [await self._return(row) for row in rows[:limit]], len(rows) > limit, total
+        return await self._returns(rows[:limit]), len(rows) > limit, total
 
     async def update_return(self, return_id: uuid.UUID, **fields: Any) -> None:
         await self._session.execute(
@@ -513,27 +547,21 @@ class OrderRepository:
             await self._session.scalar(select(Return.id).where(Return.rma_number == rma))
         ) is not None
 
-    async def _return(self, row: Return) -> ReturnRecord:
+    async def _returns(self, rows: Sequence[Return]) -> list[ReturnRecord]:
+        """Records for these returns, with every return's lines read in one query."""
+        if not rows:
+            return []
         lines = (
             await self._session.execute(
                 select(ReturnItem, OrderItem.product_title, OrderItem.variant_title, OrderItem.sku)
                 .join(OrderItem, OrderItem.id == ReturnItem.order_item_id)
-                .where(ReturnItem.return_id == row.id)
+                .where(ReturnItem.return_id.in_([row.id for row in rows]))
                 .execution_options(populate_existing=True)
             )
         ).all()
-        return ReturnRecord(
-            id=row.id,
-            order_id=row.order_id,
-            rma_number=row.rma_number,
-            status=row.status,
-            reason=row.reason,
-            customer_note=row.customer_note,
-            staff_note=row.staff_note,
-            refund_amount=row.refund_amount,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            items=tuple(
+        items: dict[uuid.UUID, list[ReturnItemRecord]] = {}
+        for item, title, variant, sku in lines:
+            items.setdefault(item.return_id, []).append(
                 ReturnItemRecord(
                     order_item_id=item.order_item_id,
                     quantity=item.quantity,
@@ -543,6 +571,20 @@ class OrderRepository:
                     variant_title=variant,
                     sku=sku,
                 )
-                for item, title, variant, sku in lines
-            ),
-        )
+            )
+        return [
+            ReturnRecord(
+                id=row.id,
+                order_id=row.order_id,
+                rma_number=row.rma_number,
+                status=row.status,
+                reason=row.reason,
+                customer_note=row.customer_note,
+                staff_note=row.staff_note,
+                refund_amount=row.refund_amount,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                items=tuple(items.get(row.id, ())),
+            )
+            for row in rows
+        ]

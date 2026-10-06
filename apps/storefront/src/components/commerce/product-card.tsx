@@ -2,7 +2,6 @@
 
 import type { Schema } from "@velo/api-client";
 import { HeartIcon, PlusIcon } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -13,6 +12,7 @@ import { useWishlist } from "@/components/commerce/wishlist-context";
 import { notify } from "@/components/ui/sonner";
 import { callApi, fieldErrors } from "@/lib/api-browser";
 import { cn } from "@/lib/utils";
+import { CatalogImage } from "@/components/commerce/catalog-image";
 
 type Card = Schema<"ProductCard">;
 
@@ -66,14 +66,12 @@ export function ProductCard({
     <article className="group relative flex flex-col gap-2">
       <div className="bg-surface-sunken relative aspect-[4/5] overflow-hidden rounded-md">
         {card.image ? (
-          <Image
-            src={card.image.url}
+          <CatalogImage
+            media={card.image}
             alt={card.image.alt_text ?? ""}
-            fill
             priority={priority}
             sizes="(min-width: 1280px) 20vw, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
             className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-            unoptimized
           />
         ) : null}
         {!card.in_stock && (

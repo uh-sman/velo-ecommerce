@@ -8,7 +8,7 @@ under test is exactly what ``alembic upgrade head`` produces.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -268,6 +268,23 @@ async def worker_ctx(live_app: FastAPI, mailer: InMemoryMailer) -> AsyncIterator
             await worker.meili.wait_for_task(task)
     finally:
         await worker.meili.aclose()
+
+
+@pytest.fixture
+async def relay(
+    live_app: FastAPI, mailer: InMemoryMailer
+) -> AsyncIterator[Callable[[], Awaitable[dict[str, int]]]]:
+    """One round of the outbox relay, email captured — for account email, which
+    needs the worker but not its search index (so not ``worker_ctx``)."""
+    from velo.core.config import get_settings
+    from velo.worker import Worker, relay_outbox
+
+    worker = Worker(get_settings())
+    worker.mailer = mailer
+    worker.transport = mailer
+    ctx: dict[str, Any] = {"worker": worker, "redis": FakeArqRedis()}
+    yield lambda: relay_outbox(ctx)
+    await worker.meili.aclose()
 
 
 async def drain(ctx: dict[str, Any]) -> dict[str, int]:

@@ -2,11 +2,11 @@
 
 import type { Schema } from "@velo/api-client";
 import { ZoomInIcon } from "lucide-react";
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { CatalogImage } from "@/components/commerce/catalog-image";
 
 type Media = Schema<"MediaView">;
 
@@ -68,15 +68,12 @@ export function Gallery({
               aria-roledescription="slide"
               aria-label={`Image ${String(position + 1)} of ${String(media.length)}`}
             >
-              <Image
-                src={item.url}
+              <CatalogImage
+                media={item}
                 alt={item.alt_text ?? title}
-                fill
                 priority={position === 0}
-                loading={position === 0 ? "eager" : "lazy"}
                 sizes="(min-width: 1024px) 50vw, 100vw"
                 className="object-cover"
-                unoptimized
               />
             </div>
           ))}
@@ -121,15 +118,7 @@ export function Gallery({
                     position === index ? "border-primary" : "border-transparent",
                   )}
                 >
-                  <Image
-                    src={item.url}
-                    alt=""
-                    fill
-                    loading="lazy"
-                    sizes="96px"
-                    className="object-cover"
-                    unoptimized
-                  />
+                  <CatalogImage media={item} alt="" sizes="96px" className="object-cover" />
                 </button>
               </li>
             ))}
@@ -142,13 +131,11 @@ export function Gallery({
           <DialogTitle className="sr-only">{current?.alt_text ?? title}</DialogTitle>
           {current && (
             <div className="relative h-full w-full overflow-auto">
-              <Image
-                src={current.url}
+              <CatalogImage
+                media={current}
                 alt={current.alt_text ?? title}
-                fill
                 sizes="95vw"
                 className="object-contain"
-                unoptimized
               />
             </div>
           )}

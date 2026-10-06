@@ -108,6 +108,8 @@ class Order(HasId, HasTimestamps, Base):
         Index("idx_orders_user", "user_id", text("placed_at DESC")),
         Index("idx_orders_email", "email", text("placed_at DESC")),
         Index("idx_orders_status", "status", text("placed_at DESC")),
+        # The admin order list's default sort: newest first, id as tiebreak.
+        Index("idx_orders_placed", text("placed_at DESC"), text("id DESC")),
         # The fulfilment queue: a few hundred rows out of millions.
         Index(
             "idx_orders_unfulfilled",
